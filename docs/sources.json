@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": 1,
+      "url": "https://github.com/openai/whisper",
+      "title": "",
+      "accessed": "2026-10-06"
+    },
+    {
+      "id": 2,
+      "url": "https://github.com/SYSTRAN/faster-whisper",
+      "title": "",
+      "accessed": "2026-10-06"
+    },
+    {
+      "id": 3,
+      "url": "https://huggingface.co/Helsinki-NLP/opus-mt-en-fi",
+      "title": "",
+      "accessed": "2026-10-06"
+    },
+    {
+      "id": 4,
+      "url": "https://huggingface.co/Helsinki-NLP/opus-mt-fi-en",
+      "title": "",
+      "accessed": "2026-10-06"
+    },
+    {
+      "id": 5,
+      "url": "https://doc.qt.io/qt-6/qaudiosource.html",
+      "title": "",
+      "accessed": "2026-10-06"
+    },
+    {
+      "id": 6,
+      "url": "https://doc.qt.io/qt-6/qaudiosink.html",
+      "title": "",
+      "accessed": "2026-10-06"
+    },
+    {
+      "id": 7,
+      "url": "https://github.com/OHF-Voice/piper1-gpl",
+      "title": "",
+      "accessed": "2026-10-06"
+    },
+    {
+      "id": 8,
+      "url": "https://huggingface.co/rhasspy/piper-voices/tree/main/fi/fi_FI",
+      "title": "",
+      "accessed": "2026-10-06"
+    }
+  ]
+}

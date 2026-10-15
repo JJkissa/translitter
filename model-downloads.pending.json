@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "status": "complete",
+  "assets": [],
+  "completed": [
+    "translate-en-fi",
+    "translate-fi-en",
+    "voice-fi",
+    "voice-en"
+  ]
+}

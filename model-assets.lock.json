@@ -1,0 +1,257 @@
+{
+  "schema": 1,
+  "assets": {
+    "whisper-turbo": {
+      "repo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+      "revision": "0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf",
+      "directory": "models/whisper-turbo",
+      "files": [
+        {
+          "name": "README.md",
+          "bytes": 1445,
+          "sha256": "b3068692728faed23580cce5cd569fc47ff76c690c032b2641ffd5554ea64d8f",
+          "publisher_sha256": null
+        },
+        {
+          "name": "config.json",
+          "bytes": 2263,
+          "sha256": "b0253ea6c0d3bea6b1e19e91a02acfd3b53f4467362efcb5a3e6b16c9b3a9b7e",
+          "publisher_sha256": null
+        },
+        {
+          "name": "model.bin",
+          "bytes": 1617884929,
+          "sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da",
+          "publisher_sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da"
+        },
+        {
+          "name": "preprocessor_config.json",
+          "bytes": 340,
+          "sha256": "7ccc62c6f2765af1f3b46c00c9b5894426835a05021c8b9c01eecb6dfb542711",
+          "publisher_sha256": null
+        },
+        {
+          "name": "tokenizer.json",
+          "bytes": 2710337,
+          "sha256": "297b13372ac43916285644fb9687add3cc62ee2a1adb60da3dc25cc94c1871fd",
+          "publisher_sha256": null
+        },
+        {
+          "name": "vocabulary.json",
+          "bytes": 1068114,
+          "sha256": "c69260f2ab26d659b7c398f9a2b2b48ed0df16c3b47d7326782fd9cba71690c1",
+          "publisher_sha256": null
+        }
+      ],
+      "verified_at": "2026-10-06T12:57:05.692046+00:00"
+    },
+    "whisper-small": {
+      "repo": "Systran/faster-whisper-small",
+      "revision": "536b0662742c02347bc0e980a01041f333bce120",
+      "directory": "models/whisper-small",
+      "files": [
+        {
+          "name": "README.md",
+          "bytes": 1998,
+          "sha256": "329373481008c7c38654aff8ecdcf0163c211557cc7ba8e2ef6f2f84b4f75ec8",
+          "publisher_sha256": null
+        },
+        {
+          "name": "config.json",
+          "bytes": 2370,
+          "sha256": "b55496ac7940a7ae47d2c01eab40edfd8701feec1229d9cce3b40014383fb828",
+          "publisher_sha256": null
+        },
+        {
+          "name": "model.bin",
+          "bytes": 483546902,
+          "sha256": "3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671",
+          "publisher_sha256": "3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671"
+        },
+        {
+          "name": "tokenizer.json",
+          "bytes": 2203239,
+          "sha256": "fb7b63191e9bb045082c79fd742a3106a12c99513ab30df4a0d47fa6cb6fd0ab",
+          "publisher_sha256": null
+        },
+        {
+          "name": "vocabulary.txt",
+          "bytes": 459861,
+          "sha256": "34ce3fe1c5041027b3f8d42912270993f986dbc4bb34cf27f951e34a1e453913",
+          "publisher_sha256": null
+        }
+      ],
+      "verified_at": "2026-10-06T12:58:02.223138+00:00"
+    },
+    "translate-en-fi": {
+      "repo": "Helsinki-NLP/opus-mt-en-fi",
+      "revision": "2f68f12519005b50f9e1afe6fd57b13add55e156",
+      "directory": "models/translate-en-fi",
+      "files": [
+        {
+          "name": "README.md",
+          "bytes": 878,
+          "sha256": "9f048fc661ca3426ed1d40655ca97b8cc35765306d4d81d0add84ad8593d73dd",
+          "publisher_sha256": null
+        },
+        {
+          "name": "config.json",
+          "bytes": 1361,
+          "sha256": "f574dd86fd2017768d1e24f9028b678a6bf838d34cf9066746e5786a698dedb0",
+          "publisher_sha256": null
+        },
+        {
+          "name": "generation_config.json",
+          "bytes": 293,
+          "sha256": "837839ed0534a27084f9b980fc33f47729052dd89cb26cca7ac830765ed30e49",
+          "publisher_sha256": null
+        },
+        {
+          "name": "pytorch_model.bin",
+          "bytes": 312087523,
+          "sha256": "816eada633948a66a2a4e55711b6602129d93d310cf1bcde2ef09cb5e134a57b",
+          "publisher_sha256": "816eada633948a66a2a4e55711b6602129d93d310cf1bcde2ef09cb5e134a57b"
+        },
+        {
+          "name": "source.spm",
+          "bytes": 803110,
+          "sha256": "412535c7eb38271082f86d9574881af46057dddaf17be876da8021557104a488",
+          "publisher_sha256": null
+        },
+        {
+          "name": "target.spm",
+          "bytes": 842303,
+          "sha256": "1addb756ec0588680d57e8b9cd26c0d004e551053de4bfba4542886e0bb52caf",
+          "publisher_sha256": null
+        },
+        {
+          "name": "tokenizer_config.json",
+          "bytes": 42,
+          "sha256": "ec23fa827b5c175b55a11736aeedde43bdb258a37bbe2ca7d2690c0723355017",
+          "publisher_sha256": null
+        },
+        {
+          "name": "vocab.json",
+          "bytes": 1592256,
+          "sha256": "e54a6bc7501989cb88933482a43a51daf685360f824e9d26e23967e9252a688f",
+          "publisher_sha256": null
+        }
+      ],
+      "verified_at": "2026-10-07T05:36:26.172035+00:00"
+    },
+    "translate-fi-en": {
+      "repo": "Helsinki-NLP/opus-mt-fi-en",
+      "revision": "c4d8fff0f8f00b637f0578666f35cdacef354778",
+      "directory": "models/translate-fi-en",
+      "files": [
+        {
+          "name": "README.md",
+          "bytes": 2557,
+          "sha256": "a52c9516e42613cf9d12db66d193db38748022ad4478b2e73b3591e7179f273a",
+          "publisher_sha256": null
+        },
+        {
+          "name": "config.json",
+          "bytes": 1394,
+          "sha256": "da465a0d1d835acb5a8fe4b9b91fac713c0ea4541d1acc55e7e6fe2387c1fdeb",
+          "publisher_sha256": null
+        },
+        {
+          "name": "generation_config.json",
+          "bytes": 293,
+          "sha256": "055e5257f80d377f6b991e6e93ae7713ee634bda3ff5e8478903c35d1a8f5600",
+          "publisher_sha256": null
+        },
+        {
+          "name": "metadata.json",
+          "bytes": 1088,
+          "sha256": "873f42a3c92ab57ce3283a1ec1d4ff6dd0f11c0e595b2461df125b7fb9131648",
+          "publisher_sha256": null
+        },
+        {
+          "name": "pytorch_model.bin",
+          "bytes": 301125225,
+          "sha256": "33acd3582070f4bdefbf827ed57dc5342723d693f1a4b3bbc8908d1b4e8619f2",
+          "publisher_sha256": "33acd3582070f4bdefbf827ed57dc5342723d693f1a4b3bbc8908d1b4e8619f2"
+        },
+        {
+          "name": "source.spm",
+          "bytes": 831865,
+          "sha256": "82fcb74f79c5f5b5bf0fe73f7dfb6a646efa50ffb4b2a0cd564a1193c78a032e",
+          "publisher_sha256": null
+        },
+        {
+          "name": "target.spm",
+          "bytes": 789795,
+          "sha256": "ec7b44af3bba8e0439b9cf203adf29e37921ae6711491d138e219b9f1b69d84c",
+          "publisher_sha256": null
+        },
+        {
+          "name": "tokenizer_config.json",
+          "bytes": 44,
+          "sha256": "825a1700f11fba8446316363eeb133b59a3356d94957cc104cd8ed6f9f3cbb6b",
+          "publisher_sha256": null
+        },
+        {
+          "name": "vocab.json",
+          "bytes": 1377921,
+          "sha256": "d57a7bc71f655a6d466feb7c5f547fdec978fce756a1b34b864197aa4fa168de",
+          "publisher_sha256": null
+        }
+      ],
+      "verified_at": "2026-10-07T05:37:22.733406+00:00"
+    },
+    "voice-fi": {
+      "repo": "rhasspy/piper-voices",
+      "revision": "c10ece1aade47bb51c153c893d14e5bf8e5b7117",
+      "directory": "models/voice-fi",
+      "files": [
+        {
+          "name": "fi/fi_FI/harri/medium/MODEL_CARD",
+          "bytes": 304,
+          "sha256": "a0a7fa3f046f1e582689db76f93099735530343a3126f3f40ed64380c419a0b2",
+          "publisher_sha256": null
+        },
+        {
+          "name": "fi/fi_FI/harri/medium/fi_FI-harri-medium.onnx",
+          "bytes": 63201294,
+          "sha256": "a44167faa34caed940e4fcad139fcc35922266b2593bcebe77701774c0fb2389",
+          "publisher_sha256": "a44167faa34caed940e4fcad139fcc35922266b2593bcebe77701774c0fb2389"
+        },
+        {
+          "name": "fi/fi_FI/harri/medium/fi_FI-harri-medium.onnx.json",
+          "bytes": 4873,
+          "sha256": "3f9c9f76f74adf1fbe7279e41eea17d6610757e45effd6808bbea6be74b8916d",
+          "publisher_sha256": null
+        }
+      ],
+      "verified_at": "2026-10-07T05:37:42.848847+00:00"
+    },
+    "voice-en": {
+      "repo": "rhasspy/piper-voices",
+      "revision": "c10ece1aade47bb51c153c893d14e5bf8e5b7117",
+      "directory": "models/voice-en",
+      "files": [
+        {
+          "name": "en/en_US/lessac/medium/MODEL_CARD",
+          "bytes": 351,
+          "sha256": "ce49eb457742208166d399a40cdec2c7fa9db77960930031564ab56f12882645",
+          "publisher_sha256": null
+        },
+        {
+          "name": "en/en_US/lessac/medium/en_US-lessac-medium.onnx",
+          "bytes": 63201294,
+          "sha256": "5efe09e69902187827af646e1a6e9d269dee769f9877d17b16b1b46eeaaf019f",
+          "publisher_sha256": "5efe09e69902187827af646e1a6e9d269dee769f9877d17b16b1b46eeaaf019f"
+        },
+        {
+          "name": "en/en_US/lessac/medium/en_US-lessac-medium.onnx.json",
+          "bytes": 4885,
+          "sha256": "efe19c417bed055f2d69908248c6ba650fa135bc868b0e6abb3da181dab690a0",
+          "publisher_sha256": null
+        }
+      ],
+      "verified_at": "2026-10-07T05:37:56.374289+00:00"
+    }
+  }
+}

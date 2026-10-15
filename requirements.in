@@ -1,0 +1,15 @@
+# Application runtime; torch CPU is installed from its official wheel index first.
+# Resolved versions are captured in requirements.lock.txt after verification.
+PySide6>=6.8,<7
+faster-whisper>=1.2,<2
+transformers>=4.48,<5
+sentencepiece>=0.2,<1
+sacremoses>=0.1,<1
+piper-tts>=1.3,<2
+numpy>=1.26,<3
+scipy>=1.12,<2
+soundfile>=0.12,<1
+nvidia-cublas-cu12>=12.4,<13
+nvidia-cudnn-cu12>=9.8,<10
+pytest>=8,<10
+pytest-qt>=4.4,<5
