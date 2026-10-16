@@ -5,7 +5,8 @@ from time import monotonic
 
 import numpy as np
 
-from .core import Route
+from .core import MAX_TURN_SAMPLES, MAX_TURN_SECONDS, Route
+from .languages import VOICE_FILES, missing_assets, translation_steps
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,7 @@ class TurnResult:
     audio: np.ndarray
     rate: int
     elapsed: float
+    capture_id: int | None = None
 
 
 class ModelEngine:
@@ -32,6 +34,46 @@ class ModelEngine:
         self.model_name = model_name
         self.device = device
         self._loaded = False
+        self.translation_backend = "marian"
+        self._quality_runtime = None
+        self._quality_client = None
+
+    def set_translation_backend(self, backend, cancelled=lambda: False, progress=lambda message: None):
+        """Worker-thread-only selection; failure never silently changes translators."""
+        if backend not in ("marian", "translategemma"):
+            raise ValueError("Select Marian or local TranslateGemma")
+        if cancelled():
+            return False
+        if backend == "marian":
+            self.close()
+            return True
+        if self._quality_client is None:
+            # A previous failed start may still own a child. Never overwrite it.
+            self.close()
+            from .quality_runtime import QualityRuntime
+            runtime = QualityRuntime(self.root)
+            self._quality_runtime = runtime
+            try:
+                progress("Loading local TranslateGemma 4B")
+                client = runtime.start(cancelled)
+                stopped = client is None or cancelled()
+            except Exception:
+                self.close()
+                raise
+            if stopped:
+                self.close()
+                return False
+            self._quality_client = client
+        self.translation_backend = backend
+        return True
+
+    def close(self):
+        """Release only the optional runtime this engine owns; safe repeatedly."""
+        runtime = self._quality_runtime
+        if runtime is not None:
+            runtime.close()
+        self._quality_runtime = self._quality_client = None
+        self.translation_backend = "marian"
 
     def load(self, progress=lambda message: None):
         if self._loaded:
@@ -73,6 +115,40 @@ class ModelEngine:
                 models / f"voice-{language}" / filename, use_cuda=False,
             )
         self._loaded = True
+
+    def _load_optional(self, steps, language, progress, cancelled):
+        """Extend the bounded model cache only for this turn's translation path."""
+        from transformers import MarianMTModel, MarianTokenizer
+        from piper import PiperVoice
+
+        models = self.root / "models"
+        for source, target in steps:
+            if cancelled():
+                return False
+            if (source, target) not in self._translations:
+                progress(f"Loading {source} → {target} translation")
+                if cancelled():
+                    return False
+                path = models / f"translate-{source}-{target}"
+                tokenizer = MarianTokenizer.from_pretrained(path, local_files_only=True)
+                if cancelled():
+                    return False
+                model = MarianMTModel.from_pretrained(
+                    path, local_files_only=True, trust_remote_code=False, weights_only=True,
+                ).to("cpu").eval()
+                self._translations[source, target] = tokenizer, model
+                if cancelled():
+                    return False
+        if cancelled():
+            return False
+        if language not in self._voices:
+            progress(f"Loading {language} voice")
+            if cancelled():
+                return False
+            self._voices[language] = PiperVoice.load(
+                models / f"voice-{language}" / VOICE_FILES[language], use_cuda=False,
+            )
+        return not cancelled()
 
     @staticmethod
     def _text(value):
@@ -123,17 +199,44 @@ class ModelEngine:
         if not self._loaded:
             raise RuntimeError("Load models before interpreting")
         samples = np.asarray(samples, dtype=np.float32)
-        if samples.ndim != 1 or not 0 < len(samples) <= 128000 or not np.isfinite(samples).all():
-            raise ValueError("Input must be finite mono 16 kHz PCM, at most eight seconds")
+        if samples.ndim != 1 or not 0 < len(samples) <= MAX_TURN_SAMPLES or not np.isfinite(samples).all():
+            raise ValueError(f"Input must be finite mono 16 kHz PCM, at most {MAX_TURN_SECONDS} seconds")
+        steps = translation_steps(route.source_language, route.target_language)
+        missing = missing_assets(self.root, route.source_language, route.target_language,
+                                 additional_only=True)
+        if self.translation_backend == "translategemma":
+            missing = tuple(path for path in missing if not path.startswith("translate-"))
+        if missing:
+            raise FileNotFoundError("Required local model asset missing: " + ", ".join(missing))
+        if not self._load_optional(steps if self.translation_backend == "marian" else (), route.target_language, progress, cancelled):
+            return None
+        original = self.recognize(samples, route, cancelled, progress)
+        if cancelled() or not original:
+            return None
+        return self.interpret_text(original, route, generation, cancelled, progress,
+                                   started=started, prepared=True)
+
+    def recognize(self, samples, route, cancelled=lambda: False,
+                  progress=lambda message: None, *, words=False):
+        """Recognize a complete bounded utterance, preserving neural VAD."""
+        if cancelled():
+            return None
+        if not self._loaded:
+            raise RuntimeError("Load models before recognizing")
+        samples = np.asarray(samples, dtype=np.float32)
+        if samples.ndim != 1 or not 0 < len(samples) <= MAX_TURN_SAMPLES or not np.isfinite(samples).all():
+            raise ValueError(f"Input must be finite mono 16 kHz PCM, at most {MAX_TURN_SECONDS} seconds")
         progress("Recognizing speech")
         if cancelled():
             return None
+        options = {"word_timestamps": True} if words else {}
         segments, _ = self._whisper.transcribe(
             samples, language=route.source_language, beam_size=1,
             vad_filter=True, vad_parameters={"min_silence_duration_ms": 300},
-            condition_on_previous_text=False,
+            condition_on_previous_text=False, **options,
         )
         parts = []
+        timed = []
         iterator = iter(segments)
         while not cancelled():
             try:
@@ -143,21 +246,33 @@ class ModelEngine:
             if cancelled():
                 return None
             parts.append(segment.text.strip())
-        original = self._text(" ".join(parts))
+            if words:
+                timed.extend((word.word.strip(), float(word.start), float(word.end))
+                             for word in (segment.words or []))
+        if cancelled():
+            return None
+        text = self._text(" ".join(parts))
+        return (timed if text else []) if words else text
+
+    def interpret_text(self, original, route, generation, cancelled=lambda: False,
+                       progress=lambda message: None, *, started=None, prepared=False,
+                       capture_id=None):
+        """Translate a released transcript or explicit text without running ASR again."""
+        started = monotonic() if started is None else started
+        original = self._text(original)
         if cancelled() or not original:
             return None
-        progress("Translating")
-        if cancelled():
-            return None
-        tokenizer, model = self._translations[route.source_language, route.target_language]
-        inputs = tokenizer([original], return_tensors="pt", padding=True)
-        if cancelled():
-            return None
-        with self._torch.inference_mode():
-            output = model.generate(**inputs, max_new_tokens=96, num_beams=1)
-        if cancelled():
-            return None
-        translation = self._text(tokenizer.decode(output[0], skip_special_tokens=True))
+        steps = translation_steps(route.source_language, route.target_language)
+        if not prepared:
+            missing = missing_assets(self.root, route.source_language, route.target_language,
+                                     additional_only=True)
+            if self.translation_backend == "translategemma":
+                missing = tuple(path for path in missing if not path.startswith("translate-"))
+            if missing:
+                raise FileNotFoundError("Required local model asset missing: " + ", ".join(missing))
+            if not self._load_optional(steps if self.translation_backend == "marian" else (), route.target_language, progress, cancelled):
+                return None
+        translation = self.translate_text(original, route, cancelled, progress)
         if cancelled() or not translation:
             return None
         progress("Synthesizing speech")
@@ -169,4 +284,31 @@ class ModelEngine:
         audio, rate = speech
         return TurnResult(generation, route.speaker, route.listener,
                           route.source_language, route.target_language, original,
-                          translation, audio, rate, monotonic() - started)
+                          translation, audio, rate, monotonic() - started, capture_id)
+
+    def translate_text(self, original, route, cancelled=lambda: False,
+                       progress=lambda message: None):
+        """Text-translator substitution hook; models are prepared by interpret_text."""
+        steps = translation_steps(route.source_language, route.target_language)
+        progress("Translating")
+        if cancelled():
+            return None
+        if self.translation_backend == "translategemma":
+            return self._quality_client.translate(original, route.source_language,
+                                                  route.target_language, cancelled)
+        translation = original
+        for edge in steps:
+            if cancelled():
+                return None
+            tokenizer, model = self._translations[edge]
+            inputs = tokenizer([translation], return_tensors="pt", padding=True)
+            if cancelled():
+                return None
+            with self._torch.inference_mode():
+                output = model.generate(**inputs, max_new_tokens=256, num_beams=1)
+            if cancelled():
+                return None
+            translation = self._text(tokenizer.decode(output[0], skip_special_tokens=True))
+            if cancelled() or not translation:
+                return None
+        return translation

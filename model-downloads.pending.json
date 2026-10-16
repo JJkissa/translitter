@@ -2,10 +2,21 @@
   "schema": 1,
   "status": "complete",
   "assets": [],
+  "required": [
+    "translate-uk-en",
+    "translate-en-uk",
+    "voice-uk"
+  ],
   "completed": [
     "translate-en-fi",
     "translate-fi-en",
     "voice-fi",
-    "voice-en"
+    "voice-en",
+    "translate-ru-en",
+    "translate-en-ru",
+    "voice-ru",
+    "translate-uk-en",
+    "translate-en-uk",
+    "voice-uk"
   ]
 }

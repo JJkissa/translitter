@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "name": "TranslateGemma 4B",
+  "source": "ollama/library/translategemma:4b",
+  "directory": "models/quality-translategemma-4b",
+  "files": [
+    {
+      "name": "config.json",
+      "bytes": 489,
+      "sha256": "37490ee3c3a4ed4437a014611f3f9e9a7bc1d9934db250edaf2f929cd4f1f5b5",
+      "publisher_sha256": "37490ee3c3a4ed4437a014611f3f9e9a7bc1d9934db250edaf2f929cd4f1f5b5",
+      "url": "https://registry.ollama.ai/v2/library/translategemma/blobs/sha256:37490ee3c3a4ed4437a014611f3f9e9a7bc1d9934db250edaf2f929cd4f1f5b5"
+    },
+    {
+      "name": "template.gotmpl",
+      "bytes": 358,
+      "sha256": "e0a42594d802e5d31cdc786deb4823edb8adff66094d49de8fffe976d753e348",
+      "publisher_sha256": "e0a42594d802e5d31cdc786deb4823edb8adff66094d49de8fffe976d753e348",
+      "url": "https://registry.ollama.ai/v2/library/translategemma/blobs/sha256:e0a42594d802e5d31cdc786deb4823edb8adff66094d49de8fffe976d753e348"
+    },
+    {
+      "name": "LICENSE.txt",
+      "bytes": 8431,
+      "sha256": "3e2c24001f9ef57bf7ec959a3658fbb49cdad113cdf394c264da9d16f9bdd132",
+      "publisher_sha256": "3e2c24001f9ef57bf7ec959a3658fbb49cdad113cdf394c264da9d16f9bdd132",
+      "url": "https://registry.ollama.ai/v2/library/translategemma/blobs/sha256:3e2c24001f9ef57bf7ec959a3658fbb49cdad113cdf394c264da9d16f9bdd132"
+    },
+    {
+      "name": "parameters.json",
+      "bytes": 61,
+      "sha256": "339e884a40f6708bc761d367f0c08e448d5bb6f16b3961c340e44e0e4835a004",
+      "publisher_sha256": "339e884a40f6708bc761d367f0c08e448d5bb6f16b3961c340e44e0e4835a004",
+      "url": "https://registry.ollama.ai/v2/library/translategemma/blobs/sha256:339e884a40f6708bc761d367f0c08e448d5bb6f16b3961c340e44e0e4835a004"
+    },
+    {
+      "name": "translategemma-4b-Q4_K_M.gguf",
+      "bytes": 3298866368,
+      "sha256": "bdbf939b402e2f88fbe3e918beb777813009335756b4c17be7fe008dfe4815d4",
+      "publisher_sha256": "bdbf939b402e2f88fbe3e918beb777813009335756b4c17be7fe008dfe4815d4",
+      "url": "https://registry.ollama.ai/v2/library/translategemma/blobs/sha256:bdbf939b402e2f88fbe3e918beb777813009335756b4c17be7fe008dfe4815d4"
+    }
+  ],
+  "note": "Original Ollama GGUF is archived but incompatible with installed llama.cpp metadata; runtime uses separately verified compatible GGUF. Original model bytes were never patched.",
+  "runtime_file": "translategemma-4b-llamacpp-Q4_K_M.gguf",
+  "compatible_source": {
+    "repo": "SandLogicTechnologies/translategemma-4b-it-GGUF",
+    "revision": "cd39c30302f20fb8b788234d86a0a35a0d050619",
+    "url": "https://huggingface.co/SandLogicTechnologies/translategemma-4b-it-GGUF/resolve/cd39c30302f20fb8b788234d86a0a35a0d050619/translategemma-4b_Q4_K_M.gguf",
+    "bytes": 2489909312,
+    "sha256": "526747309109c016db547c6fc1c7b0c9c286b5e7a7556827b5419fd9543a09cd",
+    "publisher_sha256": "526747309109c016db547c6fc1c7b0c9c286b5e7a7556827b5419fd9543a09cd"
+  }
+}

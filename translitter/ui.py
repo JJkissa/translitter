@@ -6,9 +6,9 @@ from PySide6.QtCore import QObject, Signal, QTimer, Qt, QEvent
 from PySide6.QtWidgets import (QMainWindow, QWidget, QFrame, QLabel, QPushButton,
     QComboBox, QCheckBox, QSlider, QPlainTextEdit, QProgressBar,
     QVBoxLayout, QHBoxLayout, QApplication)
-from .core import make_routes, Segmenter
+from .core import MAX_TURN_SECONDS, MAX_TURN_SAMPLES, make_routes, Segmenter
 from .theme import apply_theme
-
+from .languages import LANGUAGE_NAMES, missing_assets, translation_steps
 
 class _IdleAudio(QObject):
     """No-device backend for explicitly disabled startup (screenshots/tests)."""
@@ -37,18 +37,20 @@ class ParticipantCard(QFrame):
         box = QVBoxLayout(self)
         box.setContentsMargins(20, 20, 20, 20)
         box.setSpacing(13)
-        box.addWidget(label(f"User {speaker + 1}  /  {'Finnish' if speaker == 0 else 'English'}", "participant"))
-        box.addWidget(label("SUOMI → ENGLISH" if speaker == 0 else "ENGLISH → SUOMI", "section"))
+        self.title = label(f"User {speaker + 1}", "participant")
+        self.direction = label("", "section")
+        box.addWidget(self.title)
+        box.addWidget(self.direction)
         columns = QHBoxLayout()
         self.original, self.translated = QPlainTextEdit(), QPlainTextEdit()
-        for title, editor, placeholder in (
-            ("ORIGINAL", self.original, "Your words appear here…"),
-            ("TRANSLATED", self.translated, "Translation for the other headset…")):
+        for title, editor in (
+            ("ORIGINAL", self.original),
+            ("TRANSLATED", self.translated)):
             column = QVBoxLayout()
             column.addWidget(label(title, "section"))
             editor.setReadOnly(True)
             editor.setMaximumBlockCount(100)
-            editor.setPlaceholderText(placeholder)
+
             column.addWidget(editor, 1)
             columns.addLayout(column, 1)
         box.addLayout(columns, 1)
@@ -62,7 +64,7 @@ class ParticipantCard(QFrame):
         box.addWidget(self.meter)
         self.hold = QPushButton(f"Hold to talk  ·  F{speaker + 1}")
         self.hold.setObjectName("hold")
-        self.hold.setToolTip("Hold while speaking; release to translate. Maximum turn: 8 seconds.")
+        self.hold.setToolTip(f"Hold while speaking; release to translate. Maximum {MAX_TURN_SECONDS} seconds; longer recordings are discarded.")
         self.hold.setEnabled(False)
         box.addWidget(self.hold)
 
@@ -85,15 +87,25 @@ class Window(QMainWindow):
         self.active = False
         self.generation = 0
         self.models_ready = False
+        self._translation_backend = "marian"
+        self._backend_supported = (hasattr(self.worker, "set_translation_backend")
+                                   and hasattr(self.worker, "translation_ready"))
+        self._translation_is_ready = True  # Base ready confirms unchanged Marian.
+        self._translation_request = None
+        self._translation_problem = ""
         self._closing = False
         self.segmenters = [Segmenter(), Segmenter()]
         self._held = [False, False]
         self._chunks = [[], []]
         self._sizes = [0, 0]
+        self._capture_overflow = [False, False]
         self._busy = [0, 0]
         self._playback = [False, False]
         self._cooldown = [0.0, 0.0]
         self._deferred = [[], []]
+        self._session_languages = ("fi", "en")
+        self._session_mode = "ptt"
+        self._display_languages = ("fi", "en")
         self.setWindowTitle("Translitter · Finnish ↔ English")
         self.resize(1280, 820)
         self.setMinimumSize(1000, 680)
@@ -112,6 +124,8 @@ class Window(QMainWindow):
         QApplication.instance().installEventFilter(self)
         if self.worker is not None:
             self.worker.ready.connect(self._ready)
+            if self._backend_supported:
+                self.worker.translation_ready.connect(self._translation_ready)
             self.worker.loading.connect(self._loading)
             self.worker.result.connect(self._result)
             if hasattr(self.worker, "settled"):
@@ -137,14 +151,7 @@ class Window(QMainWindow):
         page = QVBoxLayout(central)
         page.setContentsMargins(28, 24, 28, 20)
         page.setSpacing(18)
-        header = QHBoxLayout()
-        titles = QVBoxLayout()
-        titles.addWidget(label("Translitter", "brand"))
-        titles.addWidget(label("Two people. Two headsets. One conversation.", "muted"))
-        header.addLayout(titles)
-        header.addStretch()
-        header.addWidget(label("LOCAL ONLY  ·  FI ↔ EN", "badge"))
-        page.addLayout(header)
+
         controls = QFrame()
         controls.setObjectName("controls")
         config = QVBoxLayout(controls)
@@ -153,7 +160,7 @@ class Window(QMainWindow):
         self.selectors = [QComboBox(), QComboBox()]
         for speaker, selector in enumerate(self.selectors):
             col = QVBoxLayout()
-            col.addWidget(label(f"USER {speaker + 1} · {'FINNISH' if speaker == 0 else 'ENGLISH'} HEADSET", "section"))
+            col.addWidget(label(f"USER {speaker + 1} · HEADSET", "section"))
             selector.setMinimumWidth(290)
             selector.currentIndexChanged.connect(self._selection_changed)
             col.addWidget(selector)
@@ -165,6 +172,32 @@ class Window(QMainWindow):
         select_row.addWidget(self.swap_button)
         select_row.addWidget(self.refresh_button)
         config.addLayout(select_row)
+        language_row = QHBoxLayout()
+        self.language_selectors = [QComboBox(), QComboBox()]
+        for speaker, selector in enumerate(self.language_selectors):
+            language_row.addWidget(label(f"User {speaker + 1} speaks", "section"))
+            for code, name in LANGUAGE_NAMES.items():
+                selector.addItem(name, code)
+            selector.setCurrentIndex(selector.findData("fi" if speaker == 0 else "en"))
+            selector.setToolTip("Spoken language; translations play in the other participant's language. Change while stopped.")
+            language_row.addWidget(selector, 1)
+            selector.currentIndexChanged.connect(self._languages_changed)
+        config.addLayout(language_row)
+        backend_row = QHBoxLayout()
+        backend_row.addWidget(label("Translation", "section"))
+        self.translation_backend = self.backend_selector = QComboBox()
+        self.backend_selector.addItem("Marian (fast)", "marian")
+        self.backend_selector.addItem("TranslateGemma 4B", "translategemma")
+        self.backend_selector.setToolTip(
+            "Local translation only. TranslateGemma translates directly without an English pivot; "
+            "it is slower and does not guarantee better accuracy. Requires the optional installed "
+            "runtime and model; no automatic downloads. Change while stopped.")
+        self.backend_selector.currentIndexChanged.connect(self._translation_changed)
+        backend_row.addWidget(self.backend_selector, 1)
+        config.addLayout(backend_row)
+        self.language_status = label("", "muted")
+        self.language_status.setWordWrap(True)
+        config.addWidget(self.language_status)
         transport = QHBoxLayout()
         self.start_button, self.stop_button = QPushButton("Start conversation"), QPushButton("Stop")
         self.start_button.setObjectName("primary")
@@ -175,8 +208,8 @@ class Window(QMainWindow):
         transport.addWidget(self.start_button)
         transport.addWidget(self.stop_button)
         self.mode = QComboBox()
-        self.mode.addItem("Push to talk · recommended", "ptt")
-        self.mode.addItem("Automatic conversation · opt-in", "auto")
+        self.mode.addItem("Push to talk", "ptt")
+        self.mode.addItem("Automatic", "auto")
         self.mode.setToolTip("Automatic mode may hear room bleed. Use closed headsets and take turns.")
         transport.addWidget(self.mode, 1)
         self.text_only = QCheckBox("Text only")
@@ -199,7 +232,7 @@ class Window(QMainWindow):
         self.status = label("Waiting for local models…" if self.worker else "Preview · inference and audio devices disabled", "badge")
         self.status.setWordWrap(True)
         page.addWidget(self.status)
-        page.addWidget(label("Hold F1 / F2 to speak · release to translate · audio and conversation stay in memory", "muted"))
+
         self._selection_changed()
 
     def _loading(self, message):
@@ -210,16 +243,82 @@ class Window(QMainWindow):
         if self._closing:
             return
         self.models_ready = True
-        self.status.setText("Ready · select two distinct USB headsets, then Start")
+        if self._translation_is_ready:
+            self.status.setText("Ready · select two distinct USB headsets, then Start")
+        self._selection_changed()
+
+    def _translation_changed(self, *_):
+        if self.active or self._closing or not self._backend_supported:
+            self.backend_selector.blockSignals(True)
+            self.backend_selector.setCurrentIndex(self.backend_selector.findData(self._translation_backend))
+            self.backend_selector.blockSignals(False)
+            return
+        backend = self.backend_selector.currentData()
+        if backend == self._translation_backend:
+            return
+        self._translation_backend = backend
+        self._translation_is_ready = False
+        self._translation_problem = ""
+        self._translation_request = None
+        try:
+            self._translation_request = self.worker.set_translation_backend(backend)
+            self.status.setText("Checking local translation backend · microphones remain off…")
+        except Exception:
+            self._translation_problem = "Local translation backend unavailable; select Marian or restart while stopped"
+            self.status.setText(self._translation_problem)
+        self._selection_changed()
+
+    def _translation_ready(self, request, backend, ready, error):
+        if (self._closing or self.active or request != self._translation_request
+                or backend != self._translation_backend):
+            return
+        self._translation_is_ready = bool(ready)
+        self._translation_problem = "" if ready else (error or "Local translation backend unavailable; select Marian")
+        self.status.setText(self._translation_problem or "Local translation ready · press Start when ready")
         self._selection_changed()
 
     def _selected_routes(self):
         first, second = (selector.currentData() for selector in self.selectors)
         if first is None or second is None:
             raise ValueError("Connect and select two USB headsets")
-        return make_routes(first, second)
+        return make_routes(first, second, *(selector.currentData() for selector in self.language_selectors))
+
+    def _languages_changed(self, *_):
+        if self.active:
+            # Session configuration is immutable, even for programmatic changes.
+            for selector, code in zip(self.language_selectors, self._session_languages):
+                selector.blockSignals(True)
+                selector.setCurrentIndex(selector.findData(code))
+                selector.blockSignals(False)
+            return
+        languages = tuple(selector.currentData() for selector in self.language_selectors)
+        if languages != self._display_languages:
+            for card in self.cards:
+                card.original.clear()
+                card.translated.clear()
+            self._display_languages = languages
+        self._selection_changed()
+
+    def _language_problem(self):
+        first, second = (selector.currentData() for selector in self.language_selectors)
+        try:
+            translation_steps(first, second)
+        except ValueError as error:
+            return str(error)
+        missing = missing_assets(self.root, first, second, additional_only=True)
+        if self._translation_backend == "translategemma":
+            missing = tuple(path for path in missing if not path.startswith("translate-"))
+        if missing:
+            assets = sorted({path.split("/", 1)[0] for path in missing})
+            return "Local language models not installed: " + ", ".join(assets) + ". Finnish ↔ English remains available; no automatic downloads."
+        return ""
 
     def _selection_changed(self, *_):
+        if self.active and self.mode.currentData() != self._session_mode:
+            self.mode.blockSignals(True)
+            self.mode.setCurrentIndex(self.mode.findData(self._session_mode))
+            self.mode.blockSignals(False)
+            self.status.setText("Stop the conversation before changing capture mode")
         for selector in self.selectors:
             headset = selector.currentData()
             selector.setToolTip(f"Microphone: {headset.microphone_id}\nHeadphones: {headset.output_id}" if headset else "No complete USB headset pair detected")
@@ -228,10 +327,29 @@ class Window(QMainWindow):
             valid = True
         except ValueError:
             valid = False
-        self.start_button.setEnabled(self.models_ready and valid and not self.active and not self._closing)
+        problem = self._language_problem()
+        valid = valid and not problem
+        languages = tuple(selector.currentData() for selector in self.language_selectors)
+        if all(code in LANGUAGE_NAMES for code in languages):
+            first, second = languages
+            self.setWindowTitle(f"Translitter · {LANGUAGE_NAMES[first]} ↔ {LANGUAGE_NAMES[second]}")
+
+            for speaker, card in enumerate(self.cards):
+                source, target = languages[speaker], languages[1 - speaker]
+                card.title.setText(f"User {speaker + 1}  /  {LANGUAGE_NAMES[source]}")
+                card.direction.setText(f"{LANGUAGE_NAMES[source].upper()} → {LANGUAGE_NAMES[target].upper()}")
+        via_english = (self._translation_backend == "marian"
+                       and languages[0] != languages[1] and "en" not in languages)
+        note = ("Via English · accuracy may be lower." if via_english else
+                "Direct local translation · no English pivot" if self._translation_backend == "translategemma"
+                else "Direct translation")
+        self.language_status.setText(f"{problem} {note}" if problem else note)
+        self.start_button.setEnabled(self.models_ready and self._translation_is_ready
+                                     and valid and not self.active and not self._closing)
         self.stop_button.setEnabled(self.active)
-        for widget in (*self.selectors, self.swap_button, self.refresh_button, self.mode):
+        for widget in (*self.selectors, *self.language_selectors, self.swap_button, self.refresh_button, self.mode):
             widget.setEnabled(not self.active and not self._closing)
+        self.backend_selector.setEnabled(not self.active and not self._closing and self._backend_supported)
         for card in self.cards:
             card.hold.setEnabled(self.active and self.mode.currentData() == "ptt")
 
@@ -256,13 +374,18 @@ class Window(QMainWindow):
         self.selectors[1].setCurrentIndex(first)
 
     def start_session(self):
-        if self.active or not self.models_ready or self._closing:
+        if self.active or not self.models_ready or not self._translation_is_ready or self._closing:
             return
         try:
             routes = self._selected_routes()
+            problem = self._language_problem()
+            if problem:
+                raise ValueError(problem)
         except ValueError as error:
             self.status.setText(str(error))
             return
+        self._session_languages = tuple(route.source_language for route in routes)
+        self._session_mode = self.mode.currentData()
         self.generation += 1
         self._deferred = [[], []]
         self.active = True
@@ -305,9 +428,10 @@ class Window(QMainWindow):
             self._held[n] = False
             self._chunks[n] = []
             self._sizes[n] = 0
+            self._capture_overflow[n] = False
 
     def _press(self, speaker):
-        if not self.active or self.mode.currentData() != "ptt" or self._held[speaker]:
+        if not self.active or self._session_mode != "ptt" or self._held[speaker]:
             return
         self._reset_capture(speaker)
         # Claim capture before stop_playback's synchronous playing(False) signal.
@@ -316,14 +440,17 @@ class Window(QMainWindow):
             self.audio.stop_playback(speaker)
         self._playback[speaker] = False
         self._cooldown[speaker] = 0.0
-        self.cards[speaker].state.setText("Talking · release to translate")
+        self._idle_state(speaker)
 
     def _release(self, speaker):
         if not self._held[speaker]:
             return
         chunks = self._chunks[speaker]
+        overflow = self._capture_overflow[speaker]
         self._reset_capture(speaker)
-        if chunks:
+        if overflow:
+            self.cards[speaker].state.setText(f"Recording discarded · {MAX_TURN_SECONDS}-second limit; try a shorter turn")
+        elif chunks:
             self.submit_audio(speaker, np.concatenate(chunks))
         elif self.active:
             self._idle_state(speaker)
@@ -338,23 +465,30 @@ class Window(QMainWindow):
         samples = np.asarray(samples, dtype=np.float32)
         if samples.ndim != 1 or not np.isfinite(samples).all():
             return
-        if self.mode.currentData() == "auto":
-            for turn in self.segmenters[speaker].push(samples):
+        if self._session_mode == "auto":
+            was_talking = bool(self.segmenters[speaker].active)
+            turns = self.segmenters[speaker].push(samples)
+            for turn in turns:
                 self.submit_audio(speaker, turn)
             if self.segmenters[speaker].active:
                 self.cards[speaker].state.setText("Talking · automatic turn, pause to translate")
-            else:
+            elif was_talking and not turns:
+                # A discarded short turn becomes idle. Completed submissions
+                # keep their success/rejection feedback through idle callbacks.
                 self._idle_state(speaker)
         elif self._held[speaker]:
-            while len(samples):
-                take = min(len(samples), 128000 - self._sizes[speaker])
-                self._chunks[speaker].append(samples[:take].copy())
-                self._sizes[speaker] += take
-                samples = samples[take:]
-                if self._sizes[speaker] == 128000:
-                    self.submit_audio(speaker, np.concatenate(self._chunks[speaker]))
-                    self._chunks[speaker] = []
-                    self._sizes[speaker] = 0
+            if self._capture_overflow[speaker]:
+                return
+            if self._sizes[speaker] + len(samples) > MAX_TURN_SAMPLES:
+                self._capture_overflow[speaker] = True
+                self._chunks[speaker] = []
+                self._sizes[speaker] = 0
+                self.status.setText(f"Recording discarded · {MAX_TURN_SECONDS}-second PTT limit; release and try a shorter turn")
+                self._idle_state(speaker)
+                return
+            if len(samples):
+                self._chunks[speaker].append(samples.copy())
+                self._sizes[speaker] += len(samples)
 
     def submit_audio(self, speaker, samples):
         """Submit an in-memory mono 16 kHz turn; usable by explicit local demos."""
@@ -364,7 +498,10 @@ class Window(QMainWindow):
         if samples.ndim != 1 or not np.isfinite(samples).all() or len(samples) < 4000:
             self.cards[speaker].state.setText("Turn too short or invalid · speak for at least ¼ second")
             return False
-        if not self.worker.submit(self.generation, speaker, samples[:128000]):
+        if len(samples) > MAX_TURN_SAMPLES:
+            self.cards[speaker].state.setText(f"Turn discarded · maximum {MAX_TURN_SECONDS} seconds")
+            return False
+        if not self.worker.submit(self.generation, speaker, samples):
             self.status.setText("Worker busy · turn not queued; wait, then try again")
             self.cards[speaker].state.setText("Busy · queue full, please wait")
             return False
@@ -429,7 +566,10 @@ class Window(QMainWindow):
             return
         if turn.speaker not in (0, 1) or turn.listener != 1 - turn.speaker:
             return
-        source, target = ("fi", "en") if turn.speaker == 0 else ("en", "fi")
+        if getattr(turn, "capture_id", None) is not None:
+            # Retired incremental captures are never accepted as released turns.
+            return
+        source, target = self._session_languages[turn.speaker], self._session_languages[turn.listener]
         if (turn.source_language, turn.target_language) != (source, target):
             return
         card = self.cards[turn.speaker]
@@ -527,7 +667,9 @@ class Window(QMainWindow):
             self.close()
 
     def _idle_state(self, speaker):
-        if self._held[speaker]:
+        if self._held[speaker] and self._capture_overflow[speaker]:
+            state = f"Recording discarded · {MAX_TURN_SECONDS}-second limit; release to try again"
+        elif self._held[speaker]:
             state = "Talking · release to translate"
         elif self._playback[speaker]:
             state = "Paused · translated audio in your headphones"

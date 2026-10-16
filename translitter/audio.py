@@ -63,9 +63,12 @@ class AudioHub(QObject):
         if not self.running:
             return
         for speaker, source in list(self.sources.items()):
-            self._input_state(speaker, source.state())
+            # A direct failure slot may stop or replace the whole session.
+            if self.running and self.sources.get(speaker) is source:
+                self._input_state(speaker, source.state())
         for listener, sink in list(self.sinks.items()):
-            self._output_state(listener, sink.state())
+            if self.running and self.sinks.get(listener) is sink:
+                self._output_state(listener, sink.state())
 
     def headsets(self):
         return pair_devices(
@@ -89,7 +92,9 @@ class AudioHub(QObject):
         # Validate direction and uniqueness at the audio boundary too.
         first = Headset("first", routes[0].microphone_id, routes[1].output_id, "first")
         second = Headset("second", routes[1].microphone_id, routes[0].output_id, "second")
-        if tuple(routes) != make_routes(first, second):
+        if tuple(routes) != make_routes(first, second,
+                                        routes[0].source_language,
+                                        routes[1].source_language):
             raise ValueError("Invalid cross-headset routing")
         inputs = {bytes(d.id()).decode(): d for d in self.manager.audioInputs()}
         outputs = {bytes(d.id()).decode(): d for d in self.manager.audioOutputs()}
@@ -107,14 +112,13 @@ class AudioHub(QObject):
         try:
             for route in routes:
                 sink = QAudioSink(outputs[route.output_id], fmt, self)
-                sink.setVolume(self.volume)
-
+                # Track ownership before configuration so rollback sees every endpoint.
                 self.sinks[route.listener] = sink
+                sink.setVolume(self.volume)
                 self.output_ids[route.listener] = route.output_id
                 source = QAudioSource(inputs[route.microphone_id], fmt, self)
-                source.setBufferSize(6400)
-
                 self.sources[route.speaker] = source
+                source.setBufferSize(6400)
                 io = source.start()
                 if io is None or source.error() != QAudio.Error.NoError:
                     raise RuntimeError(f"Cannot open User {route.speaker + 1}'s microphone")
@@ -148,7 +152,10 @@ class AudioHub(QObject):
         if len(self.queues[listener]) >= 2:
             self.failure.emit(listener, "Playback queue full; please take shorter turns")
             return False
-        self.queues[listener].append(prepare_pcm(samples, rate))
+        data = prepare_pcm(samples, rate)
+        if not data:
+            return False
+        self.queues[listener].append(data)
         if listener not in self.buffers:
             self._next(listener)
         return True
@@ -228,12 +235,18 @@ def pair_devices(inputs, outputs):
         identity = key(identifier, "output")
         if identity:
             output_by_key.setdefault(identity, []).append(identifier)
+    input_counts = {}
+    for identifier, _ in inputs:
+        identity = key(identifier, "input")
+        if identity:
+            input_counts[identity] = input_counts.get(identity, 0) + 1
     result = []
     seen = set()
     for identifier, label in inputs:
         identity = key(identifier, "input")
         matches = output_by_key.get(identity, [])
-        if identity and len(matches) == 1 and identity not in seen:
+        if (identity and input_counts[identity] == 1
+                and len(matches) == 1 and identity not in seen):
             suffix = identity.rsplit("_", 1)[-1].removesuffix("-00")[-6:]
             result.append(Headset(identity, identifier, matches[0], f"{label} · USB {suffix}"))
             seen.add(identity)

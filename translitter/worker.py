@@ -6,7 +6,7 @@ from threading import Condition
 import numpy as np
 from PySide6.QtCore import QThread, Signal
 
-from .core import Headset, Route, make_routes
+from .core import MAX_TURN_SAMPLES, Headset, Route, make_routes
 from .engine import ModelEngine
 
 
@@ -17,6 +17,7 @@ class ModelWorker(QThread):
     settled = Signal(int, int, bool)
     error = Signal(int, str)
     loading = Signal(str)
+    translation_ready = Signal(int, str, bool, str)
 
     def __init__(self, root: Path, model_name="whisper-turbo", device="cuda", parent=None):
         super().__init__(parent)
@@ -27,8 +28,11 @@ class ModelWorker(QThread):
         self._generation = None
         self._routes = None
         self._closed = False
+        self._config_revision = 0
+        self._config_pending = None
+        self._translation_ready = True  # Unchanged Marian supports legacy callers.
         self._pending = (deque(), deque())
-        self._next_speaker = 0
+        self._clear()
 
     def _new_generation(self, generation):
         if type(generation) is not int or generation < 0:
@@ -41,16 +45,32 @@ class ModelWorker(QThread):
             queue.clear()
         self._next_speaker = 0
 
+    def set_translation_backend(self, backend):
+        """Queue stopped-only preflight; no engine calls on the caller's thread."""
+        if backend not in ("marian", "translategemma"):
+            raise ValueError("Select Marian or local TranslateGemma")
+        with self._condition:
+            if self._closed or self._routes is not None:
+                raise ValueError("Translation backend can only change while stopped")
+            self._config_revision += 1
+            self._config_pending = (self._config_revision, backend)
+            self._translation_ready = False
+            self._condition.notify_all()
+            return self._config_revision
+
     def set_session(self, generation: int, routes: tuple[Route, Route]):
         if len(routes) != 2 or not all(isinstance(route, Route) for route in routes):
             raise ValueError("Exactly two validated routes are required")
         expected = make_routes(
             Headset("first", routes[0].microphone_id, routes[1].output_id, "first"),
-            Headset("second", routes[1].microphone_id, routes[0].output_id, "second"))
+            Headset("second", routes[1].microphone_id, routes[0].output_id, "second"),
+            routes[0].source_language, routes[1].source_language)
         if tuple(routes) != expected:
             raise ValueError("Invalid cross-headset routes")
         with self._condition:
             self._new_generation(generation)
+            if not self._translation_ready:
+                raise ValueError("Translation backend is not ready; select a ready local backend")
             self._generation = generation
             self._routes = tuple(routes)
             self._clear()
@@ -74,7 +94,7 @@ class ModelWorker(QThread):
             return False
         try:
             samples = np.asarray(samples)
-            if samples.ndim != 1 or not 0 < len(samples) <= 128000 or not np.isfinite(samples).all():
+            if samples.ndim != 1 or not 0 < len(samples) <= MAX_TURN_SAMPLES or not np.isfinite(samples).all():
                 return False
             audio = np.array(samples, dtype=np.float32, copy=True)
             if not np.isfinite(audio).all():
@@ -108,29 +128,50 @@ class ModelWorker(QThread):
         with self._condition:
             if self._closed:
                 return
+        engine = None
         try:
             engine = ModelEngine(self._root, self._model_name, self._device)
             engine.load(self.loading.emit)
+            with self._condition:
+                if self._closed:
+                    return
+                self.ready.emit()
+            self._run_jobs(engine)
         except Exception as exc:
             with self._condition:
                 if not self._closed:
                     self.error.emit(-1, f"Model loading failed ({type(exc).__name__})")
+        finally:
+            with self._condition:
                 self._closed = True
                 self._routes = None
+                self._config_pending = None
+                self._translation_ready = False
                 self._clear()
-            return
-        with self._condition:
-            if self._closed:
-                return
-            self.ready.emit()
+                self._condition.notify_all()
+            if engine is not None and hasattr(engine, "close"):
+                try:
+                    engine.close()
+                except Exception:
+                    pass  # Never expose runtime output during terminal cleanup.
+
+    def _run_jobs(self, engine):
         while True:
             with self._condition:
-                self._condition.wait_for(lambda: self._closed or any(self._pending))
+                self._condition.wait_for(lambda: self._closed or self._config_pending is not None or any(self._pending))
                 if self._closed:
                     return
-                speaker = self._next_speaker if self._pending[self._next_speaker] else 1 - self._next_speaker
-                generation, route, samples = self._pending[speaker].popleft()
-                self._next_speaker = 1 - speaker
+                configuration = self._config_pending
+                self._config_pending = None
+                if configuration is None:
+                    available = [bool(queue) for queue in self._pending]
+                    speaker = self._next_speaker if available[self._next_speaker] else 1 - self._next_speaker
+                    generation, route, samples = self._pending[speaker].popleft()
+                    self._next_speaker = 1 - speaker
+            if configuration is not None:
+                self._configure(engine, *configuration)
+                continue
+
             try:
                 turn = engine.interpret(samples, route, generation,
                                         lambda: self._cancelled(generation),
@@ -138,7 +179,9 @@ class ModelWorker(QThread):
             except Exception as exc:
                 with self._condition:
                     if self._valid(generation):
-                        self.error.emit(generation, f"Turn processing failed ({type(exc).__name__})")
+                        message = (str(exc) if isinstance(exc, FileNotFoundError)
+                                   else f"Turn processing failed ({type(exc).__name__})")
+                        self.error.emit(generation, message)
                         self.settled.emit(generation, route.speaker, False)
                 continue
             with self._condition:
@@ -146,3 +189,18 @@ class ModelWorker(QThread):
                     if turn is not None:
                         self.result.emit(turn)
                     self.settled.emit(generation, route.speaker, turn is not None)
+
+    def _configure(self, engine, revision, backend):
+        def cancelled():
+            with self._condition:
+                return self._closed or revision != self._config_revision
+        ready, error = False, ""
+        try:
+            ready = engine.set_translation_backend(backend, cancelled=cancelled,
+                                                   progress=lambda text: None)
+        except Exception as exc:
+            error = f"Local translation backend unavailable ({type(exc).__name__}); select Marian or install the optional runtime"
+        with self._condition:
+            if not cancelled():
+                self._translation_ready = bool(ready)
+                self.translation_ready.emit(revision, backend, bool(ready), error)

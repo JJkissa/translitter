@@ -137,7 +137,7 @@ def test_capture_only_eligible_speaker_and_bounded_turns(gui, qtbot, automatic):
         qtbot.keyRelease(w.cards[1].original, Qt.Key_F2)
         assert len(worker.submissions) == 2
         assert worker.submissions[1][1] == 1 and len(worker.submissions[1][2]) == 128000
-        assert "Busy" in w.cards[1].state.text(), "Eight-second automatic submit must retain busy state after release"
+        assert "Busy" in w.cards[1].state.text(), "The released turn must retain busy state"
     worker.accept = False
     assert w.submit_audio(1, voice) is False
     assert "busy" in w.status.text().lower()
@@ -477,16 +477,16 @@ def test_deferred_interruption_prioritizes_ptt_and_ignores_late_playing_signals(
     assert audio.plays[-1][1] is third.audio
 
 
-def test_deferred_playback_waits_for_release_after_eight_second_ptt_submit(gui, qtbot):
+def test_deferred_playback_waits_for_release_across_long_ptt_capture(gui, qtbot):
     w, audio, worker = gui
     start(w, worker, qtbot)
     w._press(1)
     worker.result.emit(turn(w))
     audio.samples.emit(1, np.full(128000, .1, dtype=np.float32))
     audio.samples.emit(1, np.full(8000, .2, dtype=np.float32))
-    assert len(worker.submissions) == 1 and not audio.plays and w._held[1]
+    assert not worker.submissions and not audio.plays and w._held[1]
     w._release(1)
-    assert [len(item[2]) for item in worker.submissions] == [128000, 8000]
+    assert [len(item[2]) for item in worker.submissions] == [128000 + 8000]
     assert len(audio.plays) == 1
 
 

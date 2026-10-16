@@ -252,6 +252,326 @@
         }
       ],
       "verified_at": "2026-10-07T05:37:56.374289+00:00"
+    },
+    "translate-ru-en": {
+      "repo": "Helsinki-NLP/opus-mt-ru-en",
+      "revision": "fbd6dc73284f95536648512cc21d57f19191961a",
+      "directory": "models/translate-ru-en",
+      "license": "cc-by-4.0",
+      "files": [
+        {
+          "name": "README.md",
+          "bytes": 3159,
+          "sha256": "58decd5dfb14dfd59bd63a80286869798f94b7d432d249dd289de467ba9a1417",
+          "publisher_sha256": null,
+          "publisher_git_blob": "86bf639a37e88b6bbc32917fffb1b24c2ea609f9"
+        },
+        {
+          "name": "config.json",
+          "bytes": 1381,
+          "sha256": "5ea76c78596bce8fe005ef89e00de0924bf83e5f532ce08784ff1fcefb699f5f",
+          "publisher_sha256": null,
+          "publisher_git_blob": "d898c2531e824fa65c1b4c29fa77f1bc05a5d2e0"
+        },
+        {
+          "name": "generation_config.json",
+          "bytes": 293,
+          "sha256": "31cff5e74efc263ff53efac09e3e350cd462d5c8198b1136b455d63a02d8cad5",
+          "publisher_sha256": null,
+          "publisher_git_blob": "73c009f373594622ab49464e9c3b4e950bc3ac2d"
+        },
+        {
+          "name": "pytorch_model.bin",
+          "bytes": 306991893,
+          "sha256": "535450eb5613f3cc912f9ca3e54cfef6c14d201b319c24a88faf776a65538b5d",
+          "publisher_sha256": "535450eb5613f3cc912f9ca3e54cfef6c14d201b319c24a88faf776a65538b5d",
+          "publisher_git_blob": "c73448fdb9813dc61d7591fe4822602eb7e9aa60"
+        },
+        {
+          "name": "source.spm",
+          "bytes": 1080169,
+          "sha256": "745998e51ba5b058e38b7ac7765c25c43ed5c1c39cc92b27163b9b2e323c9d7c",
+          "publisher_sha256": null,
+          "publisher_git_blob": "5781b8215934ee03646a5935000a19f1233210f0"
+        },
+        {
+          "name": "target.spm",
+          "bytes": 802781,
+          "sha256": "16bebef1389a0b8ab452772c4e35b9e605e5713f8ac7baa71ca701394eaa086d",
+          "publisher_sha256": null,
+          "publisher_git_blob": "ee65931d442b9dbb755f640edb9f31b78c7c27ef"
+        },
+        {
+          "name": "tokenizer_config.json",
+          "bytes": 42,
+          "sha256": "8d826099b8c67179c83ab4ff94aff7ca7bf24ca14319cb0287b9a0b4c40b2a96",
+          "publisher_sha256": null,
+          "publisher_git_blob": "fba9222db75e67725c66f0aad3b3c08e3e0fa091"
+        },
+        {
+          "name": "vocab.json",
+          "bytes": 2601758,
+          "sha256": "33e95da3be3fa3b50169c4c46693ba2f29fbf4cb29d99044bd07d72d181fa1e9",
+          "publisher_sha256": null,
+          "publisher_git_blob": "39833c62b978f23b3429c9109dc4ee88e339c2d5"
+        }
+      ],
+      "verified_at": "2026-10-15T07:23:07.227114+00:00"
+    },
+    "translate-en-ru": {
+      "repo": "Helsinki-NLP/opus-mt-en-ru",
+      "revision": "bb09c99d180016eac6819df3dae68edb1690fdee",
+      "directory": "models/translate-en-ru",
+      "license": "apache-2.0",
+      "files": [
+        {
+          "name": "README.md",
+          "bytes": 1123,
+          "sha256": "020bfd697b7d0da0338611cf445eb44ae45dda27ff49f2bf64e21ee46882b48b",
+          "publisher_sha256": null,
+          "publisher_git_blob": "899642eeebb0bf0009f5ca1e2fe1aeabc9347d7c"
+        },
+        {
+          "name": "config.json",
+          "bytes": 1381,
+          "sha256": "d3c2614fd099bc228fc257f047e46f1c6f94cfa12dee2b1fa6c0d780e6b7de06",
+          "publisher_sha256": null,
+          "publisher_git_blob": "5330276e8482c2f613b35b7c0f9caaa54f11a988"
+        },
+        {
+          "name": "generation_config.json",
+          "bytes": 293,
+          "sha256": "152452cb7a96bff6c20b54f91fae2a655b72a8a9ce978ca3e9384f87253d5281",
+          "publisher_sha256": null,
+          "publisher_git_blob": "fc835e82b535774cc1fb51717cbcc317da317cc7"
+        },
+        {
+          "name": "pytorch_model.bin",
+          "bytes": 306991893,
+          "sha256": "d15fa58c6bc3efd3629c1b6b86d9aa6d15d2751a4620aa4cdd7eed7b5cbe583b",
+          "publisher_sha256": "d15fa58c6bc3efd3629c1b6b86d9aa6d15d2751a4620aa4cdd7eed7b5cbe583b",
+          "publisher_git_blob": "f4666309b13797a197eb2942a10bee5c43652fb0"
+        },
+        {
+          "name": "source.spm",
+          "bytes": 802781,
+          "sha256": "16bebef1389a0b8ab452772c4e35b9e605e5713f8ac7baa71ca701394eaa086d",
+          "publisher_sha256": null,
+          "publisher_git_blob": "ee65931d442b9dbb755f640edb9f31b78c7c27ef"
+        },
+        {
+          "name": "target.spm",
+          "bytes": 1080169,
+          "sha256": "745998e51ba5b058e38b7ac7765c25c43ed5c1c39cc92b27163b9b2e323c9d7c",
+          "publisher_sha256": null,
+          "publisher_git_blob": "5781b8215934ee03646a5935000a19f1233210f0"
+        },
+        {
+          "name": "tokenizer_config.json",
+          "bytes": 42,
+          "sha256": "eca697b0e7109b94a9f2a1de82173fdbd4ddee97d1fd46a15b3162f191e6eed2",
+          "publisher_sha256": null,
+          "publisher_git_blob": "462aca4d61e8761db1243aeec9703e325f6fab6f"
+        },
+        {
+          "name": "vocab.json",
+          "bytes": 2601758,
+          "sha256": "33e95da3be3fa3b50169c4c46693ba2f29fbf4cb29d99044bd07d72d181fa1e9",
+          "publisher_sha256": null,
+          "publisher_git_blob": "39833c62b978f23b3429c9109dc4ee88e339c2d5"
+        }
+      ],
+      "verified_at": "2026-10-15T07:24:38.224277+00:00"
+    },
+    "voice-ru": {
+      "repo": "rhasspy/piper-voices",
+      "revision": "c10ece1aade47bb51c153c893d14e5bf8e5b7117",
+      "directory": "models/voice-ru",
+      "license": "See archived MODEL_CARD for voice-specific terms",
+      "files": [
+        {
+          "name": "ru/ru_RU/irina/medium/MODEL_CARD",
+          "bytes": 271,
+          "sha256": "f4fc2deb0e8c6219f29202b8dd06c9638c5ffd50ad5c6b2c90cf1aa59d507593",
+          "publisher_sha256": null,
+          "publisher_git_blob": "20d6abef2a7f737b324ede38bf8422b5a5208bdc"
+        },
+        {
+          "name": "ru/ru_RU/irina/medium/ru_RU-irina-medium.onnx",
+          "bytes": 63201294,
+          "sha256": "8ff38212d23da300bbe3705c645e6e5b9475f0bfde01558eb17813e22acaaaaa",
+          "publisher_sha256": "8ff38212d23da300bbe3705c645e6e5b9475f0bfde01558eb17813e22acaaaaa",
+          "publisher_git_blob": "0b0af08563ddb90c30573fd988d2f80cb8b85dad"
+        },
+        {
+          "name": "ru/ru_RU/irina/medium/ru_RU-irina-medium.onnx.json",
+          "bytes": 4765,
+          "sha256": "c2ec28bb38e2b59e93b959b3e40348c1afebbd272f30fed5d41205d08e98a9d7",
+          "publisher_sha256": null,
+          "publisher_git_blob": "7b61766dc87a3b419855f7980e6ab14d61166412"
+        }
+      ],
+      "verified_at": "2026-10-15T07:24:54.676607+00:00"
+    },
+    "translate-uk-en": {
+      "repo": "Helsinki-NLP/opus-mt-uk-en",
+      "revision": "1b9a2a0d1aa2a329d8476d2be5c7b0b27d5397b0",
+      "directory": "models/translate-uk-en",
+      "license": "apache-2.0",
+      "files": [
+        {
+          "name": "README.md",
+          "bytes": 818,
+          "sha256": "161fd83fe3a548928daab6a6238970f4245e395528f7be37186b0a4b1e370e55",
+          "publisher_sha256": null,
+          "publisher_git_blob": "b82642a36e3c4814c61cb38c3b057af26fecd15d"
+        },
+        {
+          "name": "config.json",
+          "bytes": 1381,
+          "sha256": "767e0b7efd335e781b1856016407265b27893d213730e16b855a45ee85e17eda",
+          "publisher_sha256": null,
+          "publisher_git_blob": "120e5aeabe323b07a1966d01d1b2dccdbba9b609"
+        },
+        {
+          "name": "generation_config.json",
+          "bytes": 293,
+          "sha256": "88f6843fde44ee696384494096ed93d245c93dc8dc14a03b9f95fd95ae5968b0",
+          "publisher_sha256": null,
+          "publisher_git_blob": "ab3ffb5c806c86ba3c13775e29a59dcc8ef5e68b"
+        },
+        {
+          "name": "pytorch_model.bin",
+          "bytes": 305081481,
+          "sha256": "db67251736c28c6c703ce2ad11fbf2134f0d95b7ef053352d9e9df0f1b7ec633",
+          "publisher_sha256": "db67251736c28c6c703ce2ad11fbf2134f0d95b7ef053352d9e9df0f1b7ec633",
+          "publisher_git_blob": "1da95e80286d1b77385958327e63e3cf3a283f2c"
+        },
+        {
+          "name": "source.spm",
+          "bytes": 1007605,
+          "sha256": "7abd810b2df512e6fe177f8732f6a0b3107614c84cc52aba20d805b4cb0d7b6b",
+          "publisher_sha256": null,
+          "publisher_git_blob": "86b0151795b43da31801a75f90c57d4e5df51f1a"
+        },
+        {
+          "name": "target.spm",
+          "bytes": 808645,
+          "sha256": "4dc9157e60a15b157c2f3d5f892379b03aed111c9fe8ac7cecba5f2aa56379ef",
+          "publisher_sha256": null,
+          "publisher_git_blob": "073388b80b066615b274384782a89293ce0373b5"
+        },
+        {
+          "name": "tokenizer_config.json",
+          "bytes": 42,
+          "sha256": "5c27503ec1b2e2fd472a1c6f91369b8615bd50f858185916281971fb2de58311",
+          "publisher_sha256": null,
+          "publisher_git_blob": "baf181fdb61e84f0d3b9e1d19fdceffe83bce9be"
+        },
+        {
+          "name": "vocab.json",
+          "bytes": 2367710,
+          "sha256": "992107700c8d5f9c1f41fefa5f72ac99050852b39d75f979c4e59344e6d14770",
+          "publisher_sha256": null,
+          "publisher_git_blob": "9080f439a03be6bead1ab46f4fe5bd5e23f5b35f"
+        }
+      ],
+      "verified_at": "2026-10-15T10:44:26.297086+00:00"
+    },
+    "translate-en-uk": {
+      "repo": "Helsinki-NLP/opus-mt-en-uk",
+      "revision": "634fdc4b28bf0c8a1d4359cbbcfb29190a09dc0e",
+      "directory": "models/translate-en-uk",
+      "license": "apache-2.0",
+      "files": [
+        {
+          "name": "README.md",
+          "bytes": 818,
+          "sha256": "96ae8e43de3b038af7ba9afe95490e288a84f5191db67c858c2ca44595316c22",
+          "publisher_sha256": null,
+          "publisher_git_blob": "e53719ce6910c65d44459e1736bf102a4068f03a"
+        },
+        {
+          "name": "config.json",
+          "bytes": 1381,
+          "sha256": "01e85031802ed6c76c43269c1dc8b641d20687b79cc700cce8cd6e0440af8854",
+          "publisher_sha256": null,
+          "publisher_git_blob": "5c38959ab3a98b161c61b6d2f5426900b0e1caa2"
+        },
+        {
+          "name": "generation_config.json",
+          "bytes": 293,
+          "sha256": "81d549041e2654bdeb608a40522386799e92c670c849c9570620d2d09a59f973",
+          "publisher_sha256": null,
+          "publisher_git_blob": "fba6d267da4cad1fafd326d47bc92e2e3fdaf36f"
+        },
+        {
+          "name": "pytorch_model.bin",
+          "bytes": 305081481,
+          "sha256": "1fc8dc07ff5880253c0a51946f28ee4977efb84fa4e4586258994845b7384780",
+          "publisher_sha256": "1fc8dc07ff5880253c0a51946f28ee4977efb84fa4e4586258994845b7384780",
+          "publisher_git_blob": "48b16ccf3924a0d4fd62b5fbeef2f956987873c6"
+        },
+        {
+          "name": "source.spm",
+          "bytes": 808645,
+          "sha256": "4dc9157e60a15b157c2f3d5f892379b03aed111c9fe8ac7cecba5f2aa56379ef",
+          "publisher_sha256": null,
+          "publisher_git_blob": "073388b80b066615b274384782a89293ce0373b5"
+        },
+        {
+          "name": "target.spm",
+          "bytes": 1007605,
+          "sha256": "7abd810b2df512e6fe177f8732f6a0b3107614c84cc52aba20d805b4cb0d7b6b",
+          "publisher_sha256": null,
+          "publisher_git_blob": "86b0151795b43da31801a75f90c57d4e5df51f1a"
+        },
+        {
+          "name": "tokenizer_config.json",
+          "bytes": 42,
+          "sha256": "33e70590c12ca4b2de861bec63a06eb2a884a1d835ecc6301122d77eb66b959f",
+          "publisher_sha256": null,
+          "publisher_git_blob": "f1ae7e9f83b6a7dcb013041a54c08146b08e57d8"
+        },
+        {
+          "name": "vocab.json",
+          "bytes": 2367710,
+          "sha256": "992107700c8d5f9c1f41fefa5f72ac99050852b39d75f979c4e59344e6d14770",
+          "publisher_sha256": null,
+          "publisher_git_blob": "9080f439a03be6bead1ab46f4fe5bd5e23f5b35f"
+        }
+      ],
+      "verified_at": "2026-10-15T10:45:12.567345+00:00"
+    },
+    "voice-uk": {
+      "repo": "rhasspy/piper-voices",
+      "revision": "c10ece1aade47bb51c153c893d14e5bf8e5b7117",
+      "directory": "models/voice-uk",
+      "license": "See archived MODEL_CARD for voice-specific terms",
+      "files": [
+        {
+          "name": "uk/uk_UA/lada/x_low/MODEL_CARD",
+          "bytes": 267,
+          "sha256": "e573364d00e4497e2aa96475d785887eb3ce901b3af9fda49f7f772c3cc5ff4a",
+          "publisher_sha256": null,
+          "publisher_git_blob": "675dbdf51dae27313d6b88ae83e7165e2ba94ca1"
+        },
+        {
+          "name": "uk/uk_UA/lada/x_low/uk_UA-lada-x_low.onnx",
+          "bytes": 20628813,
+          "sha256": "f8d015d3fc19ea6bd8ac3ca1fd0c0fbac5054c609599ee73799235fd2cf5c786",
+          "publisher_sha256": "f8d015d3fc19ea6bd8ac3ca1fd0c0fbac5054c609599ee73799235fd2cf5c786",
+          "publisher_git_blob": "b71c528cd4fca040052b2f4f51248f1abf0aebe1"
+        },
+        {
+          "name": "uk/uk_UA/lada/x_low/uk_UA-lada-x_low.onnx.json",
+          "bytes": 4186,
+          "sha256": "2df74b622e78930e8a62432d1cc8380f79f34f02c8c58ebd68e6ccbc857d80aa",
+          "publisher_sha256": null,
+          "publisher_git_blob": "8fcddc6df7b1ba857ce592a3ac0035375d57f2eb"
+        }
+      ],
+      "verified_at": "2026-10-15T10:45:17.235163+00:00"
     }
   }
 }

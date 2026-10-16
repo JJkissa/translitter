@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Translitter
+Comment=Local Finnish, English, Russian and Ukrainian conversation interpreter
+Exec="@PROJECT_DIR@/start.sh"
+Path=@PROJECT_DIR@
+Icon=@PROJECT_DIR@/assets/translitter.svg
+Terminal=false
+StartupNotify=true
+StartupWMClass=Translitter
+Categories=AudioVideo;Audio;
+Keywords=translate;interpreter;Finnish;English;Russian;Ukrainian;

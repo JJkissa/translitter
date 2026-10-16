@@ -3,6 +3,12 @@ from dataclasses import dataclass
 from collections import deque
 import numpy as np
 
+from .languages import translation_steps
+
+
+MAX_TURN_SECONDS = 30
+MAX_TURN_SAMPLES = 16000 * MAX_TURN_SECONDS
+
 
 class Segmenter:
     """20 ms energy gate with bounded turns; ASR applies neural VAD later."""
@@ -25,22 +31,27 @@ class Segmenter:
             frame = self.pending[:320].copy()
             self.pending = self.pending[320:]
             speaking = float(np.sqrt(np.mean(frame * frame))) >= self.threshold
-            if not self.active and not speaking:
-                self.preroll.append(frame)
-                continue
-            if not self.active:
-                self.active = list(self.preroll)
-                self.length = sum(len(part) for part in self.active)
-                self.preroll.clear()
-            self.active.append(frame)
-            self.length += len(frame)
-            self.voiced += len(frame) if speaking else 0
-            self.quiet = 0 if speaking else self.quiet + len(frame)
-            if self.quiet >= self.quiet_samples or self.length >= self.max_samples:
-                if self.voiced >= 4000:
-                    turns.append(np.concatenate(self.active)[:self.max_samples])
-                self.active = []
-                self.length = self.voiced = self.quiet = 0
+            while len(frame):
+                if not self.active and not speaking:
+                    self.preroll.append(frame)
+                    break
+                if not self.active:
+                    self.active = list(self.preroll)
+                    self.length = sum(len(part) for part in self.active)
+                    self.preroll.clear()
+                # Split at the limit instead of clipping a complete frame:
+                # the remainder still belongs to the next automatic turn.
+                size = min(len(frame), self.max_samples - self.length)
+                self.active.append(frame[:size])
+                frame = frame[size:]
+                self.length += size
+                self.voiced += size if speaking else 0
+                self.quiet = 0 if speaking else self.quiet + size
+                if self.quiet >= self.quiet_samples or self.length >= self.max_samples:
+                    if self.voiced >= 4000:
+                        turns.append(np.concatenate(self.active))
+                    self.active = []
+                    self.length = self.voiced = self.quiet = 0
         return turns
 
 
@@ -62,7 +73,9 @@ class Route:
     output_id: str
 
 
-def make_routes(first: Headset, second: Headset) -> tuple[Route, Route]:
+def make_routes(first: Headset, second: Headset, first_language="fi",
+                second_language="en") -> tuple[Route, Route]:
+    translation_steps(first_language, second_language)
     for headset in (first, second):
         if not all((headset.key, headset.microphone_id, headset.output_id)):
             raise ValueError("Select two complete microphone/headphone pairs")
@@ -70,6 +83,6 @@ def make_routes(first: Headset, second: Headset) -> tuple[Route, Route]:
             or first.output_id == second.output_id):
         raise ValueError("Each person needs a different USB headset")
     return (
-        Route(0, 1, "fi", "en", first.microphone_id, second.output_id),
-        Route(1, 0, "en", "fi", second.microphone_id, first.output_id),
+        Route(0, 1, first_language, second_language, first.microphone_id, second.output_id),
+        Route(1, 0, second_language, first_language, second.microphone_id, first.output_id),
     )

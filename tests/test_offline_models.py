@@ -39,7 +39,10 @@ def evidence():
 @pytest.mark.parametrize("key", KEYS)
 def test_all_asset_files_match_the_pinned_manifest(key):
     manifest = json.loads((ROOT / "model-assets.lock.json").read_text())
-    assert set(manifest["assets"]) == set(KEYS)
+    assert set(KEYS) <= set(manifest["assets"])
+    optional = {"translate-ru-en", "translate-en-ru", "voice-ru",
+                "translate-uk-en", "translate-en-uk", "voice-uk"}
+    assert set(manifest["assets"]) <= set(KEYS) | optional
     record = manifest["assets"][key]
     assert re.fullmatch(r"[0-9a-f]{40}", record["revision"])
     for entry in record["files"]:

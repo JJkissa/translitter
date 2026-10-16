@@ -1,80 +1,105 @@
 # Translitter
 
-Local Finnish ↔ English speech interpreter for two people, one Linux PC and two USB headsets. Native black/white/pink interface inspired by PinkFlow.
+Local speech interpreter for two people, one Linux PC and two USB headsets. Finnish, English, Russian and Ukrainian models are installed locally. The native interface uses **white surfaces, near-black text and blue accents**. Finnish ↔ English remains the default.
 
-## Run the demo
+## Launch
+
+**PTT is release-to-translate.** Hold a talk button or key to record; recognition, translation and speech generation for that turn start only after release. Pauses and the former eight-second boundary do not submit held speech. The Live PTT option has been removed, not merely unchecked. Restart an already-open app to load the change. Verification of this revision is recorded below.
+
+Use the **Translitter** desktop shortcut or application-menu entry, or run:
 
 ```bash
 ./start.sh
 ```
 
-The launcher also works from another directory when called by its full path. Models load locally in a worker thread. Microphones remain off until **Start conversation** is clicked.
+The shortcut uses this project's launcher, isolated interpreter and native/GPU library paths. It has a matching white/black/blue icon. Models load in a worker thread; microphones remain off until **Start conversation**. The launcher also works from a different directory when called by its full path.
 
-1. Assign **User 1 · Finnish** and **User 2 · English** to different headset entries. Each entry shows a distinct USB suffix; full input/output IDs are available in the tooltip.
-2. Leave **Text only** unchecked for spoken translations.
-3. Click **Start conversation**. The microphones open simultaneously.
-4. User 1 holds **F1** or the left **Hold to talk** button while speaking Finnish, then releases it. The Finnish transcript and English translation appear in the left card; the English translation plays only in User 2's headphones.
-5. User 2 holds **F2** or the right button while speaking English, then releases it. Finnish translation appears in the right card and plays only in User 1's headphones.
-6. Use short turns. Continuous held speech is split at eight seconds; each speaker has at most two pending turns. Start with alternating turns and wait for translated playback.
-7. **Stop** immediately disables both microphones, discards playback buffers and invalidates queued/in-flight results. Closing stops capture and waits asynchronously for the model worker.
+The current desktop shortcut and menu entry were validated, marked executable, and the desktop shortcut was trusted. Launching that exact desktop file reached **Ready** in the native window. Both distinct USB headset entries were detected; a process-owned PipeWire check showed no active audio streams while idle.
 
-Keep the Translitter window active while holding a talk key. Switching away cancels the unsubmitted microphone turn and shows a cancellation notice; previously queued turns remain, and deferred translations continue playing. A late key release does not submit the cancelled audio.
+## Conversation
 
-To identify physical headsets, start capture and gently tap one microphone while neither talk button is held. Watch which participant's level meter moves. If assignments are reversed, Stop, use **Swap**, then Start again. This checks assignment without submitting that tap to recognition in push-to-talk mode.
+1. Assign **User 1** and **User 2** to different headset entries. Their USB suffixes distinguish identical models; tooltips expose the complete endpoint IDs.
+2. While stopped, choose each participant's spoken language: **Finnish, English, Russian or Ukrainian**. Select different languages. Finnish/English is the default; the other participant's language determines the translation and voice target.
+3. Choose **Marian (fast)** or **TranslateGemma 4B** under **Translation**. Marian remains the default. TranslateGemma starts an owned local model process; wait for readiness before Start becomes available. Leave **Text only** unchecked for spoken output. Click **Start conversation**.
+4. User 1 holds **F1** or the left **Hold to talk** button and speaks. Pauses are allowed while holding. **Release** to submit the complete turn for recognition, translation and speech through User 2's selected headphones. Original and translated text remain visible after processing.
+5. User 2 uses **F2** or the right button. Their translated voice goes to User 1's headphones.
+6. Use alternating turns of at most **30 seconds**, including pauses. Going over the limit discards that recording with a warning; it never starts early translation or silently translates only a prefix. Release and try a shorter turn. Each speaker can queue at most two released turns. The separate opt-in **Automatic** mode still submits after a pause; use **Push to talk** for release-only control.
+7. **Stop** immediately closes capture, resets playback buffers and invalidates queued/in-flight results. Stop before changing languages or device assignments. Changing languages clears old visible captions so they are not relabelled.
 
-Volume defaults to 45% and is capped at 80% in the application; system/headset volume also applies. Pressing a talk button while that participant hears translated speech interrupts their playback. Incoming translations wait until an active recipient PTT turn is released, preserving captured speech. At most two deferred translations wait per listener; overflow remains as text with a visible warning. The recipient microphone is ignored during playback and for a short cooldown to reduce feedback.
+Keep the window active while holding a talk key. Switching away cancels unsubmitted held audio and shows a notice; accepted worker turns remain, and deferred translated playback drains safely. A late release does not submit cancelled input.
 
-## Automatic conversation
+Incoming translated playback waits until a held recipient PTT turn is released, preserving captured speech. At most two translations wait per listener; overflow stays as text with a warning. Speaking while translated audio plays interrupts that participant's playback. The microphone is gated during playback and a short cooldown; these guards are not acoustic echo cancellation.
 
-While stopped, select **Automatic conversation · opt-in**, then Start. Each input has its own speech/pause segmenter. Both original and translated text are shown, and target-language speech is cross-routed to the other participant.
+Volume defaults to 45% and is capped at 80%; system/headset volume also applies. To identify headsets, use the meters with neither PTT button held, then Stop and **Swap** if necessary. This does not submit the tap to recognition in PTT mode.
 
-This is experimental turn-based interpretation, not simultaneous word-by-word translation. Recognition, translation and synthesis happen after release/pause. Ambient speech can reach both microphones; use close-positioned headset microphones and alternate turns. Playback guards are not acoustic echo cancellation.
+## Local translator choices
+
+**Marian (fast)** uses the existing local translators. **TranslateGemma 4B** translates directly between the selected languages, including Russian↔Finnish without an English pivot. Both keep Whisper recognition and the selected Piper output voice. Change the translator only while stopped; a missing model/runtime or failed preflight blocks capture rather than silently switching models.
+
+The larger model is optional, not a universal accuracy fix. In the latest 14-case synthetic benchmark using the owned private runtime, median translation time was **0.275 seconds**, versus **0.111 seconds** for Marian. These are text-only observations from this machine, not guaranteed speech latency. It retains “today” in the Russian greeting that Marian drops and translates a problematic Finnish partial as “bread” rather than “sandwich”, but it also changes “4:30” to “16:30” in another fixture. Verify important names, numbers and times with the other speaker.
+
+The previous live-streaming experiment is retired following independently reproduced omissions and duplication; its source/tests are preserved under ignored local evidence rather than exposed in the application. Current PTT supplies the whole released utterance to the local pipeline. Generated speech checks are not a guarantee for human speech, different hardware, continuous overlapping talk or room acoustics. Finnish ASR inflections and repeated-utterance recognition still have known quality limitations.
+
+TranslateGemma uses the separately verified compatible GGUF recorded in `quality-model.lock.json`. It needs a trusted installed Vulkan/AVX2 `llama-server` backend under LM Studio's backend directory. Translitter launches that executable directly; it does not use a cloud service or start/manage LM Studio's API server. Each start creates a private Unix socket inside a mode-0700 directory. Before sending HTTP bytes, the client checks the connected peer's exact process ID and user ID against its owned child; no TCP listener is adopted. Unconfigured clients fail closed. The runtime disables prompt logging, slot inspection, tools, MCP proxy and inherited `LLAMA_*` overrides. Socket-level absolute deadlines prevent byte trickles from extending response limits. No runtime/model downloads occur automatically. It stays warm between conversations; selecting Marian or closing the app releases its owned process and socket directory. Installed runtime binaries and the local OS are trusted software, not a sandbox or independently publisher-authenticated by Translitter.
+
+## Verified language pairs
+
+All **12 ordered directions** among the four languages passed real local text translation, generated-speech recognition/translation/synthesis, and repeated pair switching through the real native Window → model worker → engine → audio hub pipeline. Both participant positions and exact destination IDs were exercised; only the low-level physical Qt endpoints were replaced in these tests.
+
+| Requested pair | Both directions | Translation path |
+|---|---|---|
+| Ukrainian ↔ Finnish | Passed | Via English |
+| Ukrainian ↔ English | Passed | Direct |
+| Ukrainian ↔ Russian | Passed | Via English |
+| Russian ↔ Finnish | Passed | Via English |
+
+Finnish ↔ English and Russian ↔ English also passed. Ukrainian uses code `uk` internally. Language selectors are locked during an active session. Missing or removed resources still block startup visibly; runtime never downloads models automatically or selects a default audio endpoint.
+
+The table describes the Marian paths. Marian pairs without English explicitly use English as an intermediate language. Two translation steps can compound errors; successful execution is **not** proof of broad linguistic accuracy. The separate TranslateGemma backend passed basic direct text checks for all 12 directions; its realtime native speech checks cover Russian→Finnish and Finnish→English, not an all-pair human conversation trial. The Marian English→Russian translator still omits “today” in “Hello, how are you today?”. A strict expected-failure test preserves that baseline limitation.
+
+**Test boundary:** the speech fixtures are deterministic Piper-generated sentences. No real microphone capture or headphone playback was performed for the four-language matrix. Human Ukrainian/Russian conversation quality, physical keyboard acceptance, headset audibility and room bleed still need a supervised trial. The earlier Finnish/English human trial was fast and good for simple sentences but weak for difficult ones.
 
 ## Models and privacy
 
-- Whisper large-v3-turbo performs source-language speech recognition; small is an installed fallback.
-- Separate local Marian models translate Finnish → English and English → Finnish.
-- Piper Harri speaks Finnish; Lessac speaks English.
-- One shared model worker serves two independent logical audio pipelines fairly.
-- No cloud inference, automatic conversation export or microphone recording. Captions and microphone samples stay in memory; captions are limited to 100 text blocks per editor.
-- Dependency/model installation is complete and revision/checksum-pinned; see [environment preparation](docs/ENVIRONMENT.md).
+- Whisper large-v3-turbo provides source-language recognition; installed Whisper small is an alternative.
+- Six local Marian translators cover English ↔ Finnish/Russian/Ukrainian.
+- Piper voices: Finnish Harri, English Lessac, Russian Irina and Ukrainian Lada.
+- The pinned baseline language inventory contains **12 assets, 72 files and 4,179,089,209 bytes**, excluding the optional larger translator. Every file was checked against its recorded size/SHA-256; additional model files also carry publisher LFS or Git-blob evidence. TranslateGemma is recorded separately in `quality-model.lock.json`.
+- The Ukrainian installation added three assets, 19 files and 639,169,216 bytes without replacing earlier asset records.
+- Model cards/configuration are archived with their weights. Irina's model card labels its dataset license unknown; verification is not a claim of voice redistribution permission. Lada's model card labels its dataset Apache 2.0.
+- No cloud inference, automatic conversation export or microphone recording. Captions and audio stay in memory; editors retain at most 100 text blocks.
+- Downloaded models, environments, native binaries and machine-specific verification evidence are excluded from source control. Cloning the source alone does not install these assets.
 
-Optional fallback launch:
+CPU fallback:
 
 ```bash
 ./start.sh --model whisper-small --device cpu
 ```
 
-CPU fallback is available but its live speed and human-speech quality have not been established.
+CPU conversation speed and human recognition quality have not been established.
 
 ## Verification
 
-On October 7, 2026, the corrected complete suite passed **114 tests in 42.04 seconds**, with real models and explicitly authorized headset tests enabled. Native GUI checks exercised Qt F1/F2 events, both recognition/translation/synthesis paths, actual microphone streams and translated headset playback, held-PTT overlap, focus-loss cancellation and playback draining, Stop/restart, silence and clean shutdown. PipeWire links separately confirmed destination isolation.
+The pre-publication native-xcb installed-model suite passed **508 tests, 2 physical-hardware skips and 1 known quality expected failure in 90.48 seconds**; the quick suite passed **435 tests, 76 skipped in 5.68 seconds**. The remaining strict expected failure tracks Marian's English→Russian “today” omission. Regressions cover mouse and F1/F2 release, pauses and holds longer than eight seconds, full-utterance submission, over-limit rejection, cancellation, deferred cross-headset output, wrong peers receiving zero HTTP bytes, cleanup and hard deadlines. Additional bug-sweep regressions cover audio polling after synchronous stop/restart and automatic-capture segmentation boundaries. Real-model RU→FI and FI→EN native tests each held PTT for **9.1 seconds**, with zero recognition/results/playback before release, then one complete transcript/translation and exact target-headset dispatch. Only physical endpoints were faked; this is not human-headset acceptance. Historical live-build counts are not counts for this revision. Archived live source/tests and detailed test/review evidence remain under ignored `.local/`, not in the GitHub repository.
 
-**Boundary:** speech fixtures were generated by Piper and injected through Qt push-to-talk events. The hardware harness separately counts real microphone capture but excludes those samples from its captioned test conversation. Physical F-key operation, headset audibility, room bleed, human recognition quality and sustained two-person conversation still require a supervised trial. Both independently identified overlap and focus-loss bugs are fixed and verified. Final independent source review passed with no security or logic findings and all frozen hashes verified. The demo is ready for a supervised two-person trial; this does not certify translation accuracy or human acoustic acceptance.
+The previous fixed-Finnish/English assumption in the audio validator was corrected. Tests now cover all ordered language pairs through the actual audio boundary, malformed-route rejection before any endpoint opens, and all-pair switching with real inference. The expanded test harness also waits for its separately queued result collector and checks session generations rather than reading a stale collected result.
 
-**User trial feedback:** a real two-person conversation was reported as fast and very good for basic sentences, but weak for harder sentences in both directions. Configurable separated PTT keys, custom themes and Finnish/English/Russian/Ukrainian selection are requested for the next revision; see [the roadmap](docs/ROADMAP.md). They are not present in this baseline.
-
-Quick tests do not open microphones or play headphone audio:
+Quick checks:
 
 ```bash
 ./run-python.sh -m pytest tests -q
 ```
 
-Real model tests (no microphone/headphone hardware unless separately enabled):
+All installed model integrations, **without physical microphone/headphone I/O**:
 
 ```bash
-TRANSLITTER_MODEL_TESTS=1 ./run-python.sh -m pytest tests -q -s
+TRANSLITTER_MODEL_TESTS=1 TRANSLITTER_RUSSIAN_TESTS=1 TRANSLITTER_MULTILINGUAL_TESTS=1 TRANSLITTER_QUALITY_TESTS=1 ./run-python.sh -m pytest tests -q -s
 ```
 
-**The following explicitly opens both microphones and plays translated test phrases:**
+The following is different: it explicitly **opens microphones and plays test audio**:
 
 ```bash
-./run-python.sh scripts/verify_usb.py
-./run-python.sh scripts/verify_gui.py
 TRANSLITTER_MODEL_TESTS=1 TRANSLITTER_HARDWARE_TESTS=1 ./run-python.sh -m pytest tests -q -s
 ```
 
-Verification scripts retain synthetic phrase results and routing metadata under ignored `.local/`; they never store microphone samples. The regular application does not write these verification artifacts.
-
-See [checkpoint status](docs/STATUS.md), [initial design plan](docs/PLAN.md) and [next-revision roadmap](docs/ROADMAP.md). No driver replacements or sudo operations were needed. Downloaded models and machine-specific evidence are intentionally excluded from source control; cloning the repository alone does not install them.
+Ignored `.local/` evidence stores only generated-test outputs/routing metadata, not real microphone samples. See [status and review checkpoints](docs/STATUS.md), [historical preparation](docs/ENVIRONMENT.md) and [remaining work](docs/ROADMAP.md). Configurable separated PTT keys, editable theme preferences and stronger evaluated difficult-sentence quality remain separate tasks; the new palette is fixed, not a theme editor.
