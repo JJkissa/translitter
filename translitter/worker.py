@@ -94,12 +94,17 @@ class ModelWorker(QThread):
             return False
         try:
             samples = np.asarray(samples)
-            if samples.ndim != 1 or not 0 < len(samples) <= MAX_TURN_SAMPLES or not np.isfinite(samples).all():
+            if (samples.dtype.kind not in "biuf" or samples.ndim != 1
+                    or not 0 < len(samples) <= MAX_TURN_SAMPLES
+                    or not np.isfinite(samples).all()):
                 return False
-            audio = np.array(samples, dtype=np.float32, copy=True)
+            # Conversion failures are boolean rejection, independent of the
+            # caller's NumPy warning/error policy.
+            with np.errstate(over="raise", invalid="raise"):
+                audio = np.array(samples, dtype=np.float32, copy=True)
             if not np.isfinite(audio).all():
                 return False
-        except (TypeError, ValueError, OverflowError):
+        except (TypeError, ValueError, OverflowError, FloatingPointError):
             return False
         with self._condition:
             if not self._valid(generation) or len(self._pending[speaker]) >= 2:
@@ -124,6 +129,11 @@ class ModelWorker(QThread):
             if self._valid(generation):
                 self.progress.emit(generation, text)
 
+    def _loading(self, text):
+        with self._condition:
+            if not self._closed:
+                self.loading.emit(text)
+
     def run(self):
         with self._condition:
             if self._closed:
@@ -131,7 +141,10 @@ class ModelWorker(QThread):
         engine = None
         try:
             engine = ModelEngine(self._root, self._model_name, self._device)
-            engine.load(self.loading.emit)
+            with self._condition:
+                if self._closed:
+                    return
+            engine.load(self._loading)
             with self._condition:
                 if self._closed:
                     return

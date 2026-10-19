@@ -9,8 +9,11 @@ from PySide6.QtMultimedia import QtAudio as QAudio, QAudioFormat, QAudioSource, 
 
 
 def prepare_pcm(samples, source_rate):
-    if not isinstance(source_rate, int) or source_rate <= 0:
+    if isinstance(source_rate, bool) or not isinstance(source_rate, int) or source_rate <= 0:
         raise ValueError("Invalid synthesized sample rate")
+    samples = np.asarray(samples)
+    if np.iscomplexobj(samples):
+        raise ValueError("Audio must be real, mono PCM")
     samples = np.asarray(samples, dtype=np.float32)
     if samples.ndim != 1 or not np.isfinite(samples).all():
         raise ValueError("Audio must be finite, mono PCM")
@@ -48,6 +51,8 @@ class AudioHub(QObject):
         self.queues = {0: deque(), 1: deque()}
         self.tails = {0: b"", 1: b""}
         self.running = False
+        self._lifecycle = 0
+        self._output_lifecycle = [0, 0]
         self.volume = 0.45
         self.routes = ()
         self.manager.audioInputsChanged.connect(self._devices_changed)
@@ -82,8 +87,11 @@ class AudioHub(QObject):
             inputs = {bytes(d.id()).decode() for d in self.manager.audioInputs()}
             outputs = {bytes(d.id()).decode() for d in self.manager.audioOutputs()}
             if any(r.microphone_id not in inputs or r.output_id not in outputs for r in self.routes):
+                lifecycle = self._lifecycle
                 self.failure.emit(-1, "A selected headset disconnected; conversation stopped")
-                self.stop()
+                # A direct failure slot may already stop or replace this session.
+                if self._lifecycle == lifecycle:
+                    self.stop()
 
     def start(self, routes):
         from .core import make_routes, Headset
@@ -104,7 +112,11 @@ class AudioHub(QObject):
                 raise ValueError("A selected headset is missing; no default-device fallback")
             if not inputs[route.microphone_id].isFormatSupported(fmt) or not outputs[route.output_id].isFormatSupported(fmt):
                 raise ValueError("Selected headset does not support mono 16 kHz PCM")
+        stop_lifecycle = self._lifecycle + 1
         self.stop()
+        # Settlement slots may supersede this start with a newer Stop or Start.
+        if self._lifecycle != stop_lifecycle:
+            return
         self.routes = tuple(routes)
         self.running = True
         self.capture_bytes = [0, 0]
@@ -112,26 +124,51 @@ class AudioHub(QObject):
         try:
             for route in routes:
                 sink = QAudioSink(outputs[route.output_id], fmt, self)
+                # A constructor can return after a synchronous Stop or restart.
+                # This endpoint was never registered, so retire it locally only.
+                if self._lifecycle != stop_lifecycle:
+                    sink.reset()
+                    sink.deleteLater()
+                    return
                 # Track ownership before configuration so rollback sees every endpoint.
                 self.sinks[route.listener] = sink
                 sink.setVolume(self.volume)
+                # Configuration may synchronously retire this startup too.
+                if self._lifecycle != stop_lifecycle:
+                    return
                 self.output_ids[route.listener] = route.output_id
                 source = QAudioSource(inputs[route.microphone_id], fmt, self)
+                if self._lifecycle != stop_lifecycle:
+                    source.stop()
+                    source.deleteLater()
+                    return
                 self.sources[route.speaker] = source
                 source.setBufferSize(6400)
+                if self._lifecycle != stop_lifecycle:
+                    return
                 io = source.start()
+                # Activation can synchronously stop or replace this startup.
+                if self._lifecycle != stop_lifecycle:
+                    return
                 if io is None or source.error() != QAudio.Error.NoError:
                     raise RuntimeError(f"Cannot open User {route.speaker + 1}'s microphone")
                 self.inputs[route.speaker] = io
-                io.readyRead.connect(lambda n=route.speaker: self._read(n))
+                io.readyRead.connect(lambda n=route.speaker, origin=io: self._read(n, origin))
         except Exception:
+            # A retired activation failure must not tear down its replacement.
+            if self._lifecycle != stop_lifecycle:
+                return
             self.stop()
             raise
 
-    def _read(self, speaker):
+    def _read(self, speaker, origin=None):
         if not self.running or speaker not in self.inputs:
             return
-        data = self.tails[speaker] + bytes(self.inputs[speaker].readAll())
+        io = self.inputs[speaker]
+        # Deferred readyRead signals from retired devices must not drain new ones.
+        if origin is not None and origin is not io:
+            return
+        data = self.tails[speaker] + bytes(io.readAll())
         count = len(data) - len(data) % 2
         self.tails[speaker] = data[count:]
         if not count:
@@ -139,7 +176,9 @@ class AudioHub(QObject):
         samples = np.frombuffer(data[:count], dtype="<i2").astype(np.float32) / 32768
         self.capture_bytes[speaker] += count
         self.level.emit(speaker, float(np.sqrt(np.mean(samples * samples))))
-        self.samples.emit(speaker, samples)
+        # Direct level slots may stop or synchronously replace this session.
+        if self.running and self.inputs.get(speaker) is io:
+            self.samples.emit(speaker, samples)
 
     def _input_state(self, speaker, state):
         source = self.sources.get(speaker)
@@ -152,7 +191,11 @@ class AudioHub(QObject):
         if len(self.queues[listener]) >= 2:
             self.failure.emit(listener, "Playback queue full; please take shorter turns")
             return False
-        data = prepare_pcm(samples, rate)
+        try:
+            data = prepare_pcm(samples, rate)
+        except (TypeError, ValueError, OverflowError):
+            # Reject malformed output without interrupting healthy queued audio.
+            return False
         if not data:
             return False
         self.queues[listener].append(data)
@@ -164,27 +207,47 @@ class AudioHub(QObject):
         if not self.running or listener not in self.sinks or not self.queues[listener]:
             self.playing.emit(listener, False)
             return
+        self._output_lifecycle[listener] += 1
         data = self.queues[listener].popleft()
         buffer = QBuffer(self)
         buffer.setData(QByteArray(data))
         buffer.open(QIODevice.OpenModeFlag.ReadOnly)
         self.buffers[listener] = buffer
+        sink = self.sinks[listener]
         self.playing.emit(listener, True)
+        # Direct slots can stop, replace the session, or cancel just this output.
+        if (not self.running or self.sinks.get(listener) is not sink
+                or self.buffers.get(listener) is not buffer):
+            return
         self.played_bytes[listener] += len(data)
-        self.sinks[listener].start(buffer)
+        sink.start(buffer)
 
     def _output_state(self, listener, state):
         sink = self.sinks.get(listener)
         if not self.running or not sink:
             return
         if sink.error() not in (QAudio.Error.NoError, QAudio.Error.UnderrunError):
+            lifecycle = self._lifecycle
+            # stop_playback advances once; anything else supersedes this failure.
+            output_lifecycle = self._output_lifecycle[listener] + 1
             self.stop_playback(listener)
-            self.failure.emit(listener, "Headphone playback failed; verify USB connection")
+            if (self.running and self._lifecycle == lifecycle
+                    and self.sinks.get(listener) is sink
+                    and self._output_lifecycle[listener] == output_lifecycle):
+                self.failure.emit(listener, "Headphone playback failed; verify USB connection")
         elif state == QAudio.State.IdleState and listener in self.buffers:
+            lifecycle = self._lifecycle
+            output_lifecycle = self._output_lifecycle[listener]
             buffer = self.buffers.pop(listener)
             sink.reset()
             buffer.close()
             buffer.deleteLater()
+            # Reset can synchronously cancel output or replace the session.
+            # Always retire our detached buffer, but never settle newer output.
+            if (not self.running or self._lifecycle != lifecycle
+                    or self.sinks.get(listener) is not sink
+                    or self._output_lifecycle[listener] != output_lifecycle):
+                return
             if self.queues[listener]:
                 self._next(listener)
             else:
@@ -192,10 +255,18 @@ class AudioHub(QObject):
 
     def set_volume(self, volume):
         self.volume = max(0.0, min(0.8, float(volume)))
-        for sink in self.sinks.values():
-            sink.setVolume(self.volume)
+        lifecycle = self._lifecycle
+        for listener, sink in list(self.sinks.items()):
+            # A direct callback may stop or replace the session during propagation.
+            if self._lifecycle != lifecycle:
+                return
+            if self.sinks.get(listener) is sink:
+                sink.setVolume(self.volume)
 
     def stop_playback(self, listener):
+        self._output_lifecycle[listener] += 1
+        lifecycle = self._lifecycle
+        output_lifecycle = self._output_lifecycle[listener]
         self.queues[listener].clear()
         buffer = self.buffers.pop(listener, None)
         sink = self.sinks.get(listener)
@@ -204,23 +275,40 @@ class AudioHub(QObject):
         if buffer:
             buffer.close()
             buffer.deleteLater()
+        # Reset may synchronously supersede this cancellation on the same sink.
+        if (self._lifecycle != lifecycle or self.sinks.get(listener) is not sink
+                or self._output_lifecycle[listener] != output_lifecycle):
+            return
         self.playing.emit(listener, False)
 
     def stop(self):
+        self._lifecycle += 1
         self.running = False
-        for source in self.sources.values():
-            source.stop()
-            source.deleteLater()
-        self.sources.clear()
-        self.inputs.clear()
-        for listener in (0, 1):
-            self.stop_playback(listener)
-        for sink in self.sinks.values():
-            sink.deleteLater()
-        self.sinks.clear()
-        self.output_ids.clear()
+        # Retire ownership before publishing any synchronous settlement signals.
+        sources, sinks, buffers = self.sources, self.sinks, self.buffers
+        self.sources = {}
+        self.inputs = {}
+        self.sinks = {}
+        stopped_sinks = self.sinks
+        self.buffers = {}
+        self.queues = {0: deque(), 1: deque()}
+        self.output_ids = {}
         self.routes = ()
         self.tails = {0: b"", 1: b""}
+        for source in sources.values():
+            source.stop()
+            source.deleteLater()
+        for sink in sinks.values():
+            sink.reset()
+        for buffer in buffers.values():
+            buffer.close()
+            buffer.deleteLater()
+        for sink in sinks.values():
+            sink.deleteLater()
+        for listener in (0, 1):
+            if self.running or self.sinks is not stopped_sinks:
+                break
+            self.playing.emit(listener, False)
 
 
 def pair_devices(inputs, outputs):
@@ -228,7 +316,10 @@ def pair_devices(inputs, outputs):
         prefix = f"alsa_{direction}."
         if not identifier.startswith(prefix + "usb-"):
             return None
-        return identifier[len(prefix):].rsplit(".", 1)[0]
+        identity, separator, profile = identifier[len(prefix):].rpartition(".")
+        if not separator or not profile or identity == "usb-":
+            return None
+        return identity
 
     output_by_key = {}
     for identifier, label in outputs:

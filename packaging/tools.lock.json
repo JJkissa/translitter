@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "architecture": "x86_64",
+  "tools": {
+    "appimage-runtime": {
+      "repository": "AppImage/type2-runtime",
+      "revision": "8f39b89e2ac31e1640b3d3f7e9a5108e6ce805fa",
+      "asset_id": 596078161,
+      "name": "runtime-x86_64",
+      "url": "https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64",
+      "bytes": 944632,
+      "sha256": "156f4bdbde9c52d01814600013e0a273f0118dc2de98975f3c8c63427ec79074"
+    },
+    "llama-cpu": {
+      "repository": "ggml-org/llama.cpp",
+      "revision": "620d2225cc436ab0b001e3200e590e3b286ef9ab",
+      "tag": "b11669",
+      "asset_id": 644416747,
+      "name": "llama-b11669-bin-ubuntu-x64.tar.gz",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11669/llama-b11669-bin-ubuntu-x64.tar.gz",
+      "bytes": 17851611,
+      "sha256": "cf07c1c112d709bd67e522017471de57ed0ec8bea031d732c5422351c07f65ac"
+    },
+    "llama-vulkan": {
+      "repository": "ggml-org/llama.cpp",
+      "revision": "620d2225cc436ab0b001e3200e590e3b286ef9ab",
+      "tag": "b11669",
+      "asset_id": 644416615,
+      "name": "llama-b11669-bin-ubuntu-vulkan-x64.tar.gz",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11669/llama-b11669-bin-ubuntu-vulkan-x64.tar.gz",
+      "bytes": 30497889,
+      "sha256": "e8709e5ba6c1b093dea7f3de57f4aba842f9a188fba6b465782d65d6fcfa4d9f"
+    }
+  }
+}

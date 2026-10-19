@@ -1,0 +1,51 @@
+[
+  {
+    "file": "type2-runtime.txt",
+    "bytes": 1678,
+    "sha256": "aa154fc9070614bbe7921f89db11efd1dba7a1f3a41685958110e2230f9c0ca1",
+    "source": "https://raw.githubusercontent.com/AppImage/type2-runtime/8f39b89e2ac31e1640b3d3f7e9a5108e6ce805fa/LICENSE",
+    "retrieved_at": "2026-10-19T10:26:01.356600+03:00"
+  },
+  {
+    "file": "musl-COPYRIGHT.txt",
+    "bytes": 6196,
+    "sha256": "b870108ec5e7790e9f9919064f1b9421d62d5f9b0e6c230c6adf7ea2da62e97b",
+    "source": "https://git.musl-libc.org/cgit/musl/plain/COPYRIGHT",
+    "retrieved_at": "2026-10-19T10:26:16.892207+03:00"
+  },
+  {
+    "file": "libfuse-LGPL2.txt",
+    "bytes": 26530,
+    "sha256": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551",
+    "source": "https://raw.githubusercontent.com/libfuse/libfuse/master/LGPL2.txt",
+    "retrieved_at": "2026-10-19T10:26:17.134373+03:00"
+  },
+  {
+    "file": "squashfuse-LICENSE.txt",
+    "bytes": 1592,
+    "sha256": "9e909cc8a8ba27b1a649c964cf9eda37de911f3138c2b64e6d2f01703904ac13",
+    "source": "https://raw.githubusercontent.com/vasi/squashfuse/master/LICENSE",
+    "retrieved_at": "2026-10-19T10:26:17.402810+03:00"
+  },
+  {
+    "file": "zstd-LICENSE.txt",
+    "bytes": 1549,
+    "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8",
+    "source": "https://raw.githubusercontent.com/facebook/zstd/dev/LICENSE",
+    "retrieved_at": "2026-10-19T10:26:17.711504+03:00"
+  },
+  {
+    "file": "zlib-license.html",
+    "bytes": 2899,
+    "sha256": "d16e1e49584a44abccebc8fc9eda5378ce0e08d25d8fb00d99f7e4c40a84e594",
+    "source": "https://zlib.net/zlib_license.html",
+    "retrieved_at": "2026-10-19T10:26:18.428233+03:00"
+  },
+  {
+    "file": "silero-vad-LICENSE.txt",
+    "bytes": 1075,
+    "sha256": "2e63e9a38b6e8fc0c7bc37ce174caca1862870856c6daf5697cfb785e925520b",
+    "source": "https://raw.githubusercontent.com/snakers4/silero-vad/master/LICENSE",
+    "retrieved_at": "2026-10-19T10:26:18.634566+03:00"
+  }
+]

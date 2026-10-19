@@ -30,7 +30,10 @@ class Segmenter:
         while len(self.pending) >= 320:
             frame = self.pending[:320].copy()
             self.pending = self.pending[320:]
-            speaking = float(np.sqrt(np.mean(frame * frame))) >= self.threshold
+            # Widen before squaring: every finite float32 frame has a safe
+            # float64 energy, including subnormal and maximum amplitudes.
+            energy_frame = frame.astype(np.float64)
+            speaking = float(np.sqrt(np.mean(energy_frame * energy_frame))) >= self.threshold
             while len(frame):
                 if not self.active and not speaking:
                     self.preroll.append(frame)
@@ -38,6 +41,15 @@ class Segmenter:
                 if not self.active:
                     self.active = list(self.preroll)
                     self.length = sum(len(part) for part in self.active)
+                    # Idle context must leave room for an eligible voiced turn.
+                    # Keep the newest context, trimming only silent preroll.
+                    budget = self.max_samples - 4000
+                    while self.length > budget:
+                        part = self.active.pop(0)
+                        trim = min(len(part), self.length - budget)
+                        self.length -= trim
+                        if trim < len(part):
+                            self.active.insert(0, part[trim:])
                     self.preroll.clear()
                 # Split at the limit instead of clipping a complete frame:
                 # the remainder still belongs to the next automatic turn.

@@ -137,7 +137,7 @@ class Window(QMainWindow):
         self.refresh_devices()
         self._discovery = QTimer(self)
         self._discovery.setSingleShot(True)
-        self._discovery.timeout.connect(self.refresh_devices)
+        self._discovery.timeout.connect(self._reconcile_devices)
         self._discovery.start(800)
         self._close_poll = QTimer(self)
         self._close_poll.setInterval(50)
@@ -236,11 +236,11 @@ class Window(QMainWindow):
         self._selection_changed()
 
     def _loading(self, message):
-        if not self._closing:
+        if not self._closing and not self.models_ready:
             self.status.setText(message)
 
     def _ready(self):
-        if self._closing:
+        if self._closing or self.models_ready:
             return
         self.models_ready = True
         if self._translation_is_ready:
@@ -358,13 +358,24 @@ class Window(QMainWindow):
             return
         keys = [s.currentData().key if s.currentData() else None for s in self.selectors]
         pairs = self.audio.headsets()
+        indices = [next((i for i, p in enumerate(pairs) if p.key == key), None)
+                   for key in keys]
+        # Reserve both surviving selections before assigning a missing device.
+        # Independent positional defaults can otherwise duplicate the survivor.
+        used = {i for i in indices if i is not None}
+        for speaker, index in enumerate(indices):
+            if index is None:
+                default = min(speaker, len(pairs) - 1)
+                index = (default if default not in used else
+                         next((i for i in range(len(pairs)) if i not in used), default))
+                indices[speaker] = index
+                used.add(index)
         for speaker, selector in enumerate(self.selectors):
             selector.blockSignals(True)
             selector.clear()
             for pair in pairs:
                 selector.addItem(pair.label, pair)
-            index = next((i for i, p in enumerate(pairs) if p.key == keys[speaker]), min(speaker, len(pairs) - 1))
-            selector.setCurrentIndex(index)
+            selector.setCurrentIndex(indices[speaker])
             selector.blockSignals(False)
         self._selection_changed()
 
@@ -387,6 +398,7 @@ class Window(QMainWindow):
         self._session_languages = tuple(route.source_language for route in routes)
         self._session_mode = self.mode.currentData()
         self.generation += 1
+        generation = self.generation
         self._deferred = [[], []]
         self.active = True
         try:
@@ -395,6 +407,9 @@ class Window(QMainWindow):
         except Exception as error:
             self.stop_session()
             self.status.setText(f"Cannot start: {error}")
+            return
+        # A synchronous audio failure can stop this session inside start().
+        if not self.active or self.generation != generation:
             return
         self._reset_capture()
         self._playback = [False, False]
@@ -462,8 +477,15 @@ class Window(QMainWindow):
         if self._playback[speaker] or monotonic() < self._cooldown[speaker]:
             self.segmenters[speaker].reset()
             return
-        samples = np.asarray(samples, dtype=np.float32)
-        if samples.ndim != 1 or not np.isfinite(samples).all():
+        try:
+            samples = np.asarray(samples)
+            if samples.ndim != 1 or samples.dtype.kind not in "buif":
+                return
+            if not np.isfinite(samples).all():
+                return
+            with np.errstate(over="raise", invalid="raise"):
+                samples = np.asarray(samples, dtype=np.float32)
+        except (TypeError, ValueError, OverflowError, FloatingPointError):
             return
         if self._session_mode == "auto":
             was_talking = bool(self.segmenters[speaker].active)
@@ -490,23 +512,48 @@ class Window(QMainWindow):
                 self._chunks[speaker].append(samples.copy())
                 self._sizes[speaker] += len(samples)
 
+    def _reject_turn(self, speaker, message):
+        self.status.setText(message)
+        if (self._held[speaker] or self._playback[speaker]
+                or (self._session_mode == "auto" and self.segmenters[speaker].active)):
+            # An invalid explicit turn must not hide concurrent live activity.
+            self._idle_state(speaker)
+        else:
+            self.cards[speaker].state.setText(message)
+        return False
+
     def submit_audio(self, speaker, samples):
         """Submit an in-memory mono 16 kHz turn; usable by explicit local demos."""
-        if not self.active or speaker not in (0, 1) or self.worker is None:
+        if (not self.active or type(speaker) is not int
+                or speaker not in (0, 1) or self.worker is None):
             return False
-        samples = np.asarray(samples, dtype=np.float32)
-        if samples.ndim != 1 or not np.isfinite(samples).all() or len(samples) < 4000:
-            self.cards[speaker].state.setText("Turn too short or invalid · speak for at least ¼ second")
-            return False
+        try:
+            samples = np.asarray(samples)
+            if (samples.ndim != 1 or samples.dtype.kind not in "buif"
+                    or not np.isfinite(samples).all() or len(samples) < 4000):
+                raise ValueError("Invalid mono numeric turn")
+            with np.errstate(over="raise", invalid="raise"):
+                samples = np.asarray(samples, dtype=np.float32)
+        except (TypeError, ValueError, OverflowError, FloatingPointError):
+            return self._reject_turn(speaker, "Turn too short or invalid · speak for at least ¼ second")
         if len(samples) > MAX_TURN_SAMPLES:
-            self.cards[speaker].state.setText(f"Turn discarded · maximum {MAX_TURN_SECONDS} seconds")
-            return False
+            return self._reject_turn(speaker, f"Turn discarded · maximum {MAX_TURN_SECONDS} seconds")
         if not self.worker.submit(self.generation, speaker, samples):
             self.status.setText("Worker busy · turn not queued; wait, then try again")
-            self.cards[speaker].state.setText("Busy · queue full, please wait")
+            if (self._held[speaker] or self._playback[speaker]
+                    or (self._session_mode == "auto" and self.segmenters[speaker].active)):
+                # Rejection concerns this explicit turn, not live capture/playback.
+                self._idle_state(speaker)
+            else:
+                self.cards[speaker].state.setText("Busy · queue full, please wait")
             return False
         self._busy[speaker] += 1
-        self.cards[speaker].state.setText("Busy · transcribing and translating locally…")
+        if (self._held[speaker] or self._playback[speaker]
+                or (self._session_mode == "auto" and self.segmenters[speaker].active)):
+            # Queued inference does not supersede live capture/playback feedback.
+            self._idle_state(speaker)
+        else:
+            self.cards[speaker].state.setText("Busy · transcribing and translating locally…")
         self.status.setText(f"User {speaker + 1} · interpreting a local turn")
         return True
 
@@ -525,7 +572,10 @@ class Window(QMainWindow):
                     else:
                         self._release(speaker)
                 return True
-        if watched is self and event.type() == QEvent.WindowDeactivate:
+        if (watched is self and event.type() == QEvent.WindowDeactivate
+                and self._session_mode == "ptt"):
+            # Only held-key capture needs focus-loss cancellation. Automatic
+            # conversation stays active in the background and must retain audio.
             cancelled = any(self._held)
             self._reset_capture()
             if cancelled and self.active and not self._closing:
@@ -545,7 +595,9 @@ class Window(QMainWindow):
             return
         self._busy[speaker] = max(0, self._busy[speaker] - 1)
         self._idle_state(speaker)
-        if not self._busy[speaker] and not self._playback[speaker]:
+        if (not self._busy[speaker] and not self._playback[speaker]
+                and not self._held[speaker]
+                and not (self._session_mode == "auto" and self.segmenters[speaker].active)):
             self.cards[speaker].state.setText("Waiting · turn produced no transcript")
 
     def _error(self, generation, message):
@@ -589,11 +641,13 @@ class Window(QMainWindow):
             self._flush_playback(turn.listener)
 
     def _flush_playback(self, listener):
-        if (not self.active or self.text_only.isChecked() or self._held[listener]
-                or self._playback[listener] or not self._deferred[listener]):
-            return
-        samples, rate = self._deferred[listener].pop(0)
-        if not self.audio.play(listener, samples, rate):
+        while (self.active and not self.text_only.isChecked() and not self._held[listener]
+               and not self._playback[listener] and self._deferred[listener]):
+            samples, rate = self._deferred[listener].pop(0)
+            if self.audio.play(listener, samples, rate):
+                return
+            # Rejected output produces no completion signal to advance the FIFO.
+            # Recheck lifecycle guards before attempting the next translation.
             self.status.setText("Translation ready · headphone playback unavailable")
 
     def _playing(self, listener, playing):
@@ -603,6 +657,10 @@ class Window(QMainWindow):
         if self._held[listener]:
             self._playback[listener] = False
             self._cooldown[listener] = 0.0
+            return
+        if not playing and not self._playback[listener]:
+            # stop_playback also notifies idle endpoints (e.g. Text only).
+            # Only a real playback completion may reset capture/cooldown.
             return
         if playing and self.text_only.isChecked():
             return
@@ -633,6 +691,14 @@ class Window(QMainWindow):
     def _devices_changed(self):
         if self._closing:
             return
+        self._reconcile_devices()
+        # Enumeration can trail Qt's device change notification. Recheck active
+        # routes too, rather than calling refresh_devices (a no-op when active).
+        self._discovery.start(800)
+
+    def _reconcile_devices(self):
+        if self._closing:
+            return
         if self.active:
             present = {(h.key, h.microphone_id, h.output_id) for h in self.audio.headsets()}
             selected = [s.currentData() for s in self.selectors]
@@ -640,8 +706,6 @@ class Window(QMainWindow):
                 self.stop_session()
                 self.status.setText("A selected headset disconnected · reconnect and select again")
         self.refresh_devices()
-        # Enumeration can trail Qt's device change notification.
-        self._discovery.start(800)
 
     def closeEvent(self, event):
         if not self._closing:
@@ -673,6 +737,8 @@ class Window(QMainWindow):
             state = "Talking · release to translate"
         elif self._playback[speaker]:
             state = "Paused · translated audio in your headphones"
+        elif self._session_mode == "auto" and self.segmenters[speaker].active:
+            state = "Talking · automatic turn, pause to translate"
         elif self._busy[speaker]:
             state = "Busy · interpreting a queued local turn…"
         else:

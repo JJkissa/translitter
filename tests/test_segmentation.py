@@ -49,6 +49,46 @@ def test_callback_chunking_does_not_change_turns(chunk_size):
         np.testing.assert_array_equal(turn, reference)
 
 
+@pytest.mark.parametrize("max_ms", [250, 260, 400, 440, 450, 510, 8000])
+def test_preroll_cannot_crowd_out_minimum_speech_at_small_limits(max_ms):
+    segmenter = core.Segmenter(quiet_ms=200, max_ms=max_ms)
+    preroll = np.linspace(0.001, 0.005, 3200, dtype=np.float32)
+    assert segmenter.push(preroll) == []
+    speech = np.linspace(0.02, 0.08, 320000, dtype=np.float32)
+    turns = segmenter.push(speech)
+    assert turns
+    retained = np.concatenate(turns + segmenter.active + [segmenter.pending])
+    # Even the first voiced samples must survive a full idle preroll.
+    np.testing.assert_array_equal(retained[retained >= 0.01], speech)
+    preroll_size = min(len(preroll), segmenter.max_samples - 4000)
+    expected_preroll = preroll[-preroll_size:] if preroll_size else preroll[:0]
+    np.testing.assert_array_equal(turns[0][:preroll_size], expected_preroll)
+    assert all(len(turn) <= segmenter.max_samples for turn in turns)
+    assert all(np.count_nonzero(turn >= 0.01) >= 4000 for turn in turns)
+
+
+@pytest.mark.parametrize("max_ms", [250, 260, 400, 8000])
+def test_small_limit_preroll_does_not_make_short_noise_eligible(max_ms):
+    segmenter = core.Segmenter(quiet_ms=200, max_ms=max_ms)
+    samples = np.concatenate((np.zeros(3200), np.full(3840, 0.05),
+                              np.zeros(6400))).astype(np.float32)
+    assert segmenter.push(samples) == []
+
+
+@pytest.mark.parametrize("chunk_size", [1, 319, 4096])
+def test_small_limit_preroll_is_callback_independent(chunk_size):
+    samples = np.concatenate((np.zeros(3200), np.full(16000, 0.05),
+                              np.zeros(6400))).astype(np.float32)
+    expected = core.Segmenter(quiet_ms=200, max_ms=260).push(samples)
+    segmenter = core.Segmenter(quiet_ms=200, max_ms=260)
+    actual = []
+    for start in range(0, len(samples), chunk_size):
+        actual.extend(segmenter.push(samples[start:start + chunk_size]))
+    assert len(actual) == len(expected)
+    for turn, reference in zip(actual, expected):
+        np.testing.assert_array_equal(turn, reference)
+
+
 def test_reset_discards_active_preroll_and_partial_frame():
     segmenter = core.Segmenter(quiet_ms=200)
     segmenter.push(np.zeros(3200, dtype=np.float32))

@@ -40,18 +40,58 @@ window.audio.samples.connect(
 )
 window.show()
 evidence = {"input_kind": "generated_speech_through_native_PTT_events", "turns": [], "errors": []}
-state = {"step": 0, "deadline": time.monotonic() + 45, "done": False}
+state = {"step": 0, "deadline": time.monotonic() + 45, "done": False, "failed": False}
 
 
 def abort(message):
+    if state["failed"] or state["done"]:
+        return
+    state["failed"] = True
     print("GUI_CHECK_FAILED", state["step"], message, flush=True)
     evidence["errors"].append(message)
-    window.close()
-    timer.stop()
-    app.exit(1)
+    try:
+        window.close()
+    except Exception as exc:
+        evidence["errors"].append(f"Window close: {type(exc).__name__}: {exc}")
+        # closeEvent may have marked itself closing before teardown raised.
+        # A second close need not retry it; attempt the remaining resources
+        # independently without forcing a normally asynchronous close.
+        for label, operation in [("Audio stop", window.audio.stop),
+                                 ("Worker shutdown", window.worker.shutdown)]:
+            try:
+                operation()
+            except Exception as cleanup_exc:
+                evidence["errors"].append(
+                    f"{label}: {type(cleanup_exc).__name__}: {cleanup_exc}")
+    try:
+        timer.stop()
+    except Exception as exc:
+        evidence["errors"].append(f"Timer stop: {type(exc).__name__}: {exc}")
+    finally:
+        app.exit(1)
+
+
+def save_evidence(path, data):
+    """Keep the previous successful artifact unless the new save completes."""
+    from pathlib import Path
+    from tempfile import NamedTemporaryFile
+
+    payload = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    temporary = None
+    try:
+        with NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                prefix=f".{path.name}-", delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(payload)
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def key_event(speaker, pressed):
+    if state["failed"] or state["done"]:
+        return
     # Send Qt events directly: XCB QTest native key injection is asynchronous
     # and did not reliably deliver simultaneous F-key holds in this harness.
     key = Qt.Key_F1 if speaker == 0 else Qt.Key_F2
@@ -60,32 +100,54 @@ def key_event(speaker, pressed):
 
 
 def speak(speaker):
+    if state["failed"] or state["done"]:
+        return
     key_event(speaker, True)
+    if state["failed"] or state["done"]:
+        return
     assert window._held[speaker], f"Key press not handled for User {speaker + 1}"
     window.audio.samples.emit(speaker, fixtures[speaker])
+    if state["failed"] or state["done"]:
+        return
     assert window._sizes[speaker] == len(fixtures[speaker]), f"Fixture not captured for User {speaker + 1}"
     key_event(speaker, False)
+    if state["failed"] or state["done"]:
+        return
     assert not window._held[speaker] and window._busy[speaker] == 1, f"Key release did not submit User {speaker + 1}'s fixture"
 
 
 def check():
+    if state["failed"] or state["done"]:
+        return
     try:
         assert time.monotonic() < state["deadline"], "GUI verification timed out"
         if state["step"] == 0:
             if not window.models_ready or len(window.audio.headsets()) != 2:
                 return
             window.refresh_devices()
+            if state["failed"] or state["done"]:
+                return
             assert window.start_button.isEnabled()
             QTest.mouseClick(window.start_button, Qt.LeftButton)
+            if state["failed"] or state["done"]:
+                return
             assert window.active and len(window.audio.sources) == 2
             window.audio.set_volume(0.30)
+            if state["failed"] or state["done"]:
+                return
             evidence["headsets"] = [selector.currentText() for selector in window.selectors]
             # Hold User 2's generated English turn while User 1's Finnish
             # translation arrives: this is the independently reported overlap.
             key_event(1, True)
+            if state["failed"] or state["done"]:
+                return
             window.audio.samples.emit(1, fixtures[1])
+            if state["failed"] or state["done"]:
+                return
             assert window._held[1] and window._sizes[1] == len(fixtures[1]), f"Fixture capture: held={window._held[1]}, stored={window._sizes[1]}, expected={len(fixtures[1])}"
             speak(0)
+            if state["failed"] or state["done"]:
+                return
             state["step"] = 1
         elif state["step"] == 1:
             if not window.cards[0].translated.toPlainText():
@@ -97,6 +159,8 @@ def check():
             evidence["overlap"] = {"preserved_samples": window._sizes[1],
                 "deferred_translations": len(window._deferred[1]), "playback_before_release": False}
             key_event(1, False)
+            if state["failed"] or state["done"]:
+                return
             assert window._busy[1] == 1, "Release did not submit preserved English speech"
             state["step"] = 2
         elif state["step"] == 2:
@@ -113,22 +177,36 @@ def check():
             assert all(size > 0 for size in window.audio.capture_bytes)
             evidence["microphone_bytes_received"] = window.audio.capture_bytes.copy()
             assert window.grab().save(str(root / ".local/gui-live-check.png"))
+            if state["failed"] or state["done"]:
+                return
             QTest.mouseClick(window.stop_button, Qt.LeftButton)
+            if state["failed"] or state["done"]:
+                return
             assert not window.active and not window.audio.sources and not window.audio.sinks
             QTest.mouseClick(window.start_button, Qt.LeftButton)
+            if state["failed"] or state["done"]:
+                return
             assert window.active
             # A second real translation waits behind User 1's held synthetic
             # input. Focus loss must cancel that input and drain the translation.
             key_event(0, True)
+            if state["failed"] or state["done"]:
+                return
             window.audio.samples.emit(0, fixtures[0])
+            if state["failed"] or state["done"]:
+                return
             assert window._held[0] and window._sizes[0] == len(fixtures[0])
             speak(1)
+            if state["failed"] or state["done"]:
+                return
             state["step"] = 3
         elif state["step"] == 3:
             if not window._deferred[0]:
                 return
             assert window._held[0] and window._sizes[0] == len(fixtures[0])
             QApplication.sendEvent(window, QEvent(QEvent.WindowDeactivate))
+            if state["failed"] or state["done"]:
+                return
             assert not window._held[0] and not window._deferred[0]
             assert window._sizes[0] == 0 and window._busy[0] == 0
             assert "cancelled" in window.status.text().lower()
@@ -136,7 +214,11 @@ def check():
                 "partial_turn_submitted": False, "deferred_queue_drained": True,
                 "status": window.status.text()}
             QApplication.sendEvent(window, QEvent(QEvent.WindowActivate))
+            if state["failed"] or state["done"]:
+                return
             key_event(0, False)
+            if state["failed"] or state["done"]:
+                return
             assert window._busy[0] == 0, "Late release submitted cancelled speech"
             state["step"] = 4
         elif state["step"] == 4:
@@ -145,7 +227,11 @@ def check():
             assert window.audio.played_bytes[0] > 0
             evidence["focus_loss"]["completed_playback_bytes"] = window.audio.played_bytes[0]
             window.text_only.setChecked(True)
+            if state["failed"] or state["done"]:
+                return
             assert window.submit_audio(0, np.zeros(16000, dtype=np.float32))
+            if state["failed"] or state["done"]:
+                return
             state["step"] = 5
         elif state["step"] == 5:
             if window._busy[0]:
@@ -153,15 +239,19 @@ def check():
             assert not window.audio.buffers
             assert "Busy" not in window.cards[0].state.text()
             QTest.mouseClick(window.stop_button, Qt.LeftButton)
+            if state["failed"] or state["done"]:
+                return
             assert not window.active
             window.close()
+            if state["failed"] or state["done"]:
+                return
             state["step"] = 6
         elif state["step"] == 6:
             if window.isVisible() or window.worker.isRunning():
                 return
-            state["done"] = True
             timer.stop()
-            (root / ".local/gui-integration.json").write_text(json.dumps(evidence, indent=2) + "\n")
+            save_evidence(root / ".local/gui-integration.json", evidence)
+            state["done"] = True
             print(json.dumps(evidence, ensure_ascii=False, indent=2), flush=True)
             print("PASS_NATIVE_GUI_BOTH_PIPELINES_STOP_RESTART_AND_SILENCE", flush=True)
             app.quit()
@@ -176,7 +266,20 @@ timer = QTimer()
 timer.timeout.connect(check)
 timer.start(60)
 app.exec()
-window.audio.stop()
-window.worker.shutdown()
-assert window.worker.wait(15000), "Model thread failed to close"
-assert state["done"] and not evidence["errors"], evidence
+# Shutdown is idempotent, so retry after an abort's partial cleanup. Do not let
+# one failing endpoint prevent the remaining cleanup or the bounded worker join.
+for label, operation in [("Audio stop", window.audio.stop),
+                         ("Worker shutdown", window.worker.shutdown)]:
+    try:
+        operation()
+    except Exception as exc:
+        state["failed"] = True
+        evidence["errors"].append(f"{label}: {type(exc).__name__}: {exc}")
+try:
+    if not window.worker.wait(15000):
+        state["failed"] = True
+        evidence["errors"].append("Model thread failed to close within 15000 ms")
+except Exception as exc:
+    state["failed"] = True
+    evidence["errors"].append(f"Worker wait: {type(exc).__name__}: {exc}")
+assert state["done"] and not state["failed"] and not evidence["errors"], evidence

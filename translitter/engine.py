@@ -70,6 +70,9 @@ class ModelEngine:
     def close(self):
         """Release only the optional runtime this engine owns; safe repeatedly."""
         runtime = self._quality_runtime
+        # Shutdown may stop the child before a later cleanup step fails. Keep
+        # runtime ownership for retry, but never reuse its possibly dead client.
+        self._quality_client = None
         if runtime is not None:
             runtime.close()
         self._quality_runtime = self._quality_client = None
@@ -177,19 +180,48 @@ class ModelEngine:
                 break
             if cancelled():
                 return None
-            audio = np.asarray(chunk.audio_float_array, dtype=np.float32)
-            next_rate = int(chunk.sample_rate)
+            audio = np.asarray(chunk.audio_float_array)
+            if audio.dtype.kind not in "biuf":
+                raise ValueError("Voice produced invalid audio")
+            try:
+                with np.errstate(over="raise", invalid="raise"):
+                    audio = np.asarray(audio, dtype=np.float32)
+            except FloatingPointError:
+                raise ValueError("Voice produced invalid audio") from None
+            next_rate = chunk.sample_rate
+            if isinstance(next_rate, (bool, np.bool_)) or not isinstance(next_rate, (int, np.integer)):
+                raise ValueError("Voice produced invalid audio")
+            next_rate = int(next_rate)
             if audio.ndim != 1 or not len(audio) or not np.isfinite(audio).all() or not 8000 <= next_rate <= 48000:
                 raise ValueError("Voice produced invalid audio")
             if rate is not None and rate != next_rate:
                 raise ValueError("Voice changed sample rate during a turn")
-            chunks.append(audio)
+            # Voices may reuse their buffer on the next iterator advance.
+            # Own the validated samples before asking for another chunk.
+            chunks.append(audio.copy())
             rate = next_rate
         if cancelled():
             return None
         if not chunks:
             raise ValueError("Voice produced no audio")
         return np.concatenate(chunks).astype(np.float32), rate
+
+    @staticmethod
+    def _input_pcm(samples):
+        error = f"Input must be finite mono 16 kHz PCM, at most {MAX_TURN_SECONDS} seconds"
+        samples = np.asarray(samples)
+        if (samples.dtype.kind not in "biuf" or samples.ndim != 1
+                or not 0 < len(samples) <= MAX_TURN_SAMPLES
+                or not np.isfinite(samples).all()):
+            raise ValueError(error)
+        try:
+            with np.errstate(over="raise", invalid="raise"):
+                samples = np.asarray(samples, dtype=np.float32)
+        except FloatingPointError:
+            raise ValueError(error) from None
+        if not np.isfinite(samples).all():
+            raise ValueError(error)
+        return samples
 
     def interpret(self, samples: np.ndarray, route: Route, generation: int,
                   cancelled=lambda: False, progress=lambda message: None):
@@ -198,9 +230,7 @@ class ModelEngine:
             return None
         if not self._loaded:
             raise RuntimeError("Load models before interpreting")
-        samples = np.asarray(samples, dtype=np.float32)
-        if samples.ndim != 1 or not 0 < len(samples) <= MAX_TURN_SAMPLES or not np.isfinite(samples).all():
-            raise ValueError(f"Input must be finite mono 16 kHz PCM, at most {MAX_TURN_SECONDS} seconds")
+        samples = self._input_pcm(samples)
         steps = translation_steps(route.source_language, route.target_language)
         missing = missing_assets(self.root, route.source_language, route.target_language,
                                  additional_only=True)
@@ -223,9 +253,7 @@ class ModelEngine:
             return None
         if not self._loaded:
             raise RuntimeError("Load models before recognizing")
-        samples = np.asarray(samples, dtype=np.float32)
-        if samples.ndim != 1 or not 0 < len(samples) <= MAX_TURN_SAMPLES or not np.isfinite(samples).all():
-            raise ValueError(f"Input must be finite mono 16 kHz PCM, at most {MAX_TURN_SECONDS} seconds")
+        samples = self._input_pcm(samples)
         progress("Recognizing speech")
         if cancelled():
             return None
@@ -245,13 +273,17 @@ class ModelEngine:
                 break
             if cancelled():
                 return None
-            parts.append(segment.text.strip())
+            parts.append(segment.text)
             if words:
                 timed.extend((word.word.strip(), float(word.start), float(word.end))
                              for word in (segment.words or []))
         if cancelled():
             return None
+        # Validate raw segments before whitespace normalization can erase
+        # forbidden control characters at segment boundaries.
         text = self._text(" ".join(parts))
+        if text:
+            text = " ".join(part.strip() for part in parts).strip()
         return (timed if text else []) if words else text
 
     def interpret_text(self, original, route, generation, cancelled=lambda: False,
@@ -262,6 +294,8 @@ class ModelEngine:
         original = self._text(original)
         if cancelled() or not original:
             return None
+        if not self._loaded:
+            raise RuntimeError("Load models before interpreting")
         steps = translation_steps(route.source_language, route.target_language)
         if not prepared:
             missing = missing_assets(self.root, route.source_language, route.target_language,

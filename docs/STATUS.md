@@ -1,6 +1,28 @@
 # Checkpoint status
 
-## Current: GitHub publication checkpoint
+## Current: AppImage preview verification
+
+The Linux AppImage is built locally and exercised on Ubuntu 24.04.5, x86_64,
+glibc 2.39 with native xcb. It bundles Python/Qt/speech libraries and pinned
+CPU/Vulkan llama.cpp; target users do not need a development environment or
+LM Studio. Models/settings are installed explicitly outside the executable.
+See [end-user requirements](../requirements.md) and the illustrated
+[installation guide](INSTALLATION.md) for the exact artifact and support scope.
+
+Actual AppImage checks passed normal FUSE, both extraction paths, relocation with
+spaces, clean HOME/PATH, real pinned import/download, native Ready state and 14
+generated-speech pipeline cases across all four languages and CPU/CUDA. The
+source installed-model suite passed 2,119 tests, with 2 physical-hardware skips
+and the known Marian quality expected failure. These are execution checks, not
+human translation or physical audio acceptance; TranslateGemma also changed a
+greeting's meaning in one packaged fixture. Release-only PTT remains unchanged.
+
+Final notices/certificate packaging, frozen independent review, secure GitHub
+authentication and exact release publication/readback are separate gates.
+The source repository remains private; do not equate the old source publication
+with the new AppImage release. The guide records their current status.
+
+## Historical: GitHub source publication checkpoint
 
 The user authorized GitHub publication after the release-only checkpoint. Target repository: `JJkissa/translitter`, private. The current snapshot also includes the subsequent bounded bug-sweep fixes: safe audio polling after synchronous stop/restart, sample-conserving automatic segmentation at unaligned limits, and native automatic-capture cancellation/feedback regressions. PTT remains release-only; these changes do not restore streaming.
 

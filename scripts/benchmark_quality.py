@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import statistics
 import sys
+from tempfile import NamedTemporaryFile
 from time import monotonic
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +43,21 @@ def main():
         runtime.close()
 
 
+def _save_evidence(path, data):
+    """Publish a complete checkpoint only after its stream closes successfully."""
+    payload = json.dumps(data, ensure_ascii=False, indent=2) + '\n'
+    temporary = None
+    try:
+        with NamedTemporaryFile(mode='w', encoding='utf-8', dir=path.parent,
+                                prefix=f'.{path.name}-', delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(payload)
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
 def _benchmark(client):
     import torch
     from transformers import MarianMTModel, MarianTokenizer
@@ -49,6 +65,7 @@ def _benchmark(client):
     models = {}
     records = []
     path = ROOT / '.local/quality-benchmark.json'
+    path.parent.mkdir(parents=True, exist_ok=True)
     for index, (source, target, text) in enumerate(CASES):
         steps = translation_steps(source, target)
         for a, b in steps:
@@ -71,18 +88,18 @@ def _benchmark(client):
                   'baseline': baseline, 'baseline_steps': steps, 'baseline_seconds': baseline_seconds,
                   'candidate': candidate, 'candidate_direct': True, **client.last_metrics}
         records.append(record)
-        path.write_text(json.dumps({'fixture': 'synthetic test sentences, not a recorded conversation',
+        _save_evidence(path, {'fixture': 'synthetic test sentences, not a recorded conversation',
                                      'quality_verdict': 'requires human bilingual review; execution is not an accuracy score',
-                                     'records': records}, ensure_ascii=False, indent=2) + '\n')
+                                     'records': records})
         print(json.dumps(record, ensure_ascii=False), flush=True)
     summary = {'cases': len(records),
                'baseline_median_seconds': statistics.median(r['baseline_seconds'] for r in records),
                'candidate_median_seconds': statistics.median(r['seconds'] for r in records),
                'candidate_median_first_token_seconds': statistics.median(r['first_token_seconds'] for r in records),
                'human_accuracy_verdict': 'not yet evaluated'}
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding='utf-8'))
     data['summary'] = summary
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+    _save_evidence(path, data)
     print('BENCHMARK_SUMMARY', json.dumps(summary), flush=True)
 
 

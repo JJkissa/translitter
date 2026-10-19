@@ -38,15 +38,41 @@ evidence = {"input_kind": "generated_speech_not_human_microphone", "turns": [], 
 state = {"done": False, "playing": None, "failed": False}
 
 
+def cleanup(stop_session=False):
+    """Attempt each teardown once, even if it raises or emits a failure."""
+    if state.get("cleanup_started"):
+        return
+    state["cleanup_started"] = True
+    state["cleaning"] = True
+    operations = [("Audio stop", hub.stop)]
+    if stop_session:
+        operations.append(("Session stop", lambda: worker.stop_session(2)))
+    operations.append(("Worker shutdown", worker.shutdown))
+    try:
+        for label, operation in operations:
+            try:
+                operation()
+            except Exception as exc:
+                state["failed"] = True
+                evidence["errors"].append(f"{label}: {type(exc).__name__}: {exc}")
+    finally:
+        state["cleaning"] = False
+
+
 def fail(message):
-    evidence["errors"].append(message)
+    if state["failed"] or state["done"]:
+        return
     state["failed"] = True
-    hub.stop()
-    worker.shutdown()
+    evidence["errors"].append(message)
+    if state.get("cleaning"):
+        return
+    cleanup()
     app.quit()
 
 
 def inspect_graph(listener):
+    if state["failed"] or state["done"] or state.get("finishing"):
+        return
     try:
         graph = json.loads(subprocess.check_output(["pw-dump"], text=True))
         props = {int(entry["id"]): entry.get("info", {}).get("props", {}) for entry in graph}
@@ -73,6 +99,8 @@ def inspect_graph(listener):
 
 
 def receive(turn):
+    if state["failed"] or state["done"] or state.get("finishing"):
+        return
     try:
         assert turn.generation == 1
         assert turn.original and turn.translation and turn.listener == 1 - turn.speaker
@@ -82,22 +110,30 @@ def receive(turn):
             "elapsed_seconds": turn.elapsed, "rate": turn.rate, "audio_samples": len(turn.audio)})
         state["playing"] = turn.listener
         assert hub.play(turn.listener, turn.audio, turn.rate)
+        # Playback can synchronously fail and tear down the verifier before
+        # returning True; do not publish new work from the retired callback.
+        if state["failed"] or state["done"] or state.get("finishing"):
+            return
         QTimer.singleShot(200, lambda: inspect_graph(turn.listener))
     except Exception as exc:
         fail(f"Turn verification: {type(exc).__name__}: {exc}")
 
 
 def on_playing(listener, active):
+    if state["failed"] or state["done"] or state.get("finishing"):
+        return
     evidence["playback_states"].append([listener, active])
     if not active and state["playing"] == listener:
         state["playing"] = None
         if len(evidence["turns"]) == 1:
-            QTimer.singleShot(350, lambda: worker.submit(1, 1, fixtures[1]))
+            QTimer.singleShot(350, lambda: None if state["failed"] or state["done"] or state.get("finishing") else worker.submit(1, 1, fixtures[1]))
         elif len(evidence["turns"]) == 2:
             QTimer.singleShot(350, finish)
 
 
 def begin():
+    if state["failed"] or state["done"] or state.get("finishing"):
+        return
     try:
         pairs = hub.headsets()
         assert len(pairs) == 2
@@ -105,13 +141,37 @@ def begin():
         evidence["routes"] = [vars(route) for route in routes]
         hub.set_volume(0.30)
         hub.start(routes)
+        # A direct audio failure signal can finish cleanup inside start().
+        if state["failed"] or state["done"] or state.get("finishing"):
+            return
         worker.set_session(1, routes)
         assert worker.submit(1, 0, fixtures[0])
     except Exception as exc:
         fail(f"Start verification: {type(exc).__name__}: {exc}")
 
 
+def save_evidence(path, data):
+    """Publish only a fully written UTF-8 artifact, retaining the previous run."""
+    from pathlib import Path
+    from tempfile import NamedTemporaryFile
+
+    payload = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    temporary = None
+    try:
+        with NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                prefix=f".{path.name}-", delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(payload)
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
 def finish():
+    if state["failed"] or state["done"] or state.get("finishing"):
+        return
+    state["finishing"] = True
     try:
         assert len(evidence["turns"]) == 2
         assert all(turn.get("verified_graph") for turn in evidence["turns"])
@@ -122,16 +182,19 @@ def finish():
         evidence["microphone_bytes_received"] = hub.capture_bytes.copy()
         evidence["pcm_bytes_submitted"] = hub.played_bytes.copy()
         evidence["complete_playback"] = True
-        hub.stop()
-        worker.stop_session(2)
-        worker.shutdown()
+        cleanup(stop_session=True)
+        if state["failed"]:
+            app.quit()
+            return
+        save_evidence(root / ".local/usb-pipeline-check.json", evidence)
         state["done"] = True
-        (root / ".local/usb-pipeline-check.json").write_text(json.dumps(evidence, indent=2) + "\n")
         print(json.dumps(evidence, ensure_ascii=False, indent=2), flush=True)
         print("PASS_BOTH_TRANSLATED_PIPELINES_AND_ISOLATED_USB_PLAYBACK", flush=True)
         app.quit()
     except Exception as exc:
         fail(f"Finish verification: {type(exc).__name__}: {exc}")
+    finally:
+        state["finishing"] = False
 
 hub.failure.connect(lambda n, message: fail(message))
 hub.playing.connect(on_playing)
@@ -142,6 +205,21 @@ worker.result.connect(receive)
 QTimer.singleShot(45000, lambda: fail("Pipeline check timed out"))
 worker.start()
 app.exec()
-worker.shutdown()
-assert worker.wait(15000), "Model worker failed to join"
-assert state["done"] and not state["failed"], evidence
+# No callback may start more work after the event loop has exited. Retry
+# idempotent teardown independently of cleanup's single-attempt callback guard.
+state["finishing"] = True
+for label, operation in [("Audio stop", hub.stop),
+                         ("Worker shutdown", worker.shutdown)]:
+    try:
+        operation()
+    except Exception as exc:
+        state["failed"] = True
+        evidence["errors"].append(f"{label}: {type(exc).__name__}: {exc}")
+try:
+    if not worker.wait(15000):
+        state["failed"] = True
+        evidence["errors"].append("Model worker failed to join within 15000 ms")
+except Exception as exc:
+    state["failed"] = True
+    evidence["errors"].append(f"Worker wait: {type(exc).__name__}: {exc}")
+assert state["done"] and not state["failed"] and not evidence["errors"], evidence

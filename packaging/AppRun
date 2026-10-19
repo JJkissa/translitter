@@ -1,0 +1,25 @@
+#!/bin/sh
+# Do not trust inherited APPDIR, Python, dynamic-loader or Qt search paths.
+unset PYTHONPATH PYTHONHOME VIRTUAL_ENV LD_PRELOAD LD_LIBRARY_PATH
+unset QT_PLUGIN_PATH QT_QPA_PLATFORM_PLUGIN_PATH QML2_IMPORT_PATH QML_IMPORT_PATH
+APPDIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P) || exit 1
+export APPDIR
+SITE="$APPDIR/usr/lib/python3.12/site-packages"
+LD_LIBRARY_PATH="$APPDIR/usr/lib/native"
+for directory in "$SITE/torch/lib" "$SITE"/nvidia/*/lib "$SITE/PySide6/Qt/lib"; do
+    if [ -d "$directory" ]; then LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$directory"; fi
+done
+export LD_LIBRARY_PATH
+QT_PLUGIN_PATH="$SITE/PySide6/Qt/plugins"
+QT_QPA_PLATFORM_PLUGIN_PATH="$QT_PLUGIN_PATH/platforms"
+export QT_PLUGIN_PATH QT_QPA_PLATFORM_PLUGIN_PATH
+PYTHONDONTWRITEBYTECODE=1
+HF_HUB_OFFLINE=1
+TRANSFORMERS_OFFLINE=1
+HF_HUB_DISABLE_TELEMETRY=1
+DO_NOT_TRACK=1
+ANONYMIZED_TELEMETRY=False
+TOKENIZERS_PARALLELISM=false
+export PYTHONDONTWRITEBYTECODE HF_HUB_OFFLINE TRANSFORMERS_OFFLINE HF_HUB_DISABLE_TELEMETRY DO_NOT_TRACK ANONYMIZED_TELEMETRY TOKENIZERS_PARALLELISM
+# -I ignores environment Python paths and excludes the launch directory/CWD.
+exec "$APPDIR/usr/bin/python3.12" -I "$APPDIR/usr/lib/translitter/launch.py" "$@"

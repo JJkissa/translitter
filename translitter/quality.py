@@ -1,5 +1,6 @@
 """Optional TranslateGemma protocol client; production uses owned private IPC."""
 import json
+from http.client import HTTPException
 from time import monotonic
 from urllib.error import URLError
 from urllib.request import Request, HTTPRedirectHandler
@@ -63,7 +64,7 @@ class LocalTranslator:
             return True
         except QualityUnavailable:
             raise
-        except (OSError, URLError, ValueError, TypeError):
+        except (OSError, URLError, HTTPException, ValueError, TypeError):
             raise QualityUnavailable("Owned local quality translator is unavailable") from None
 
     def translate(self, text, source, target, cancelled=lambda: False):
@@ -135,5 +136,5 @@ class LocalTranslator:
             return result
         except QualityUnavailable:
             raise
-        except (OSError, URLError, ValueError, TypeError):
+        except (OSError, URLError, HTTPException, ValueError, TypeError):
             raise QualityUnavailable("Local quality translation failed; check the local runtime") from None

@@ -2,7 +2,19 @@
 
 Local speech interpreter for two people, one Linux PC and two USB headsets. Finnish, English, Russian and Ukrainian models are installed locally. The native interface uses **white surfaces, near-black text and blue accents**. Finnish ↔ English remains the default.
 
-## Launch
+## Linux AppImage
+
+For another Linux PC, use the AppImage rather than this checkout's development
+launcher. Read [end-user requirements](requirements.md) and the illustrated
+[installation and weights guide](docs/INSTALLATION.md). The preview bundles
+Python, Qt, speech dependencies and CPU/Vulkan translation runtimes; target users
+do not need a Python environment, Docker or LM Studio. Model setup explicitly
+downloads or imports pinned weights into a separate user-owned data directory.
+Download only actual release assets and verify their checksum; source files alone
+are not an installable release. The tested target is Ubuntu 24.04.5, x86_64,
+glibc 2.39 with native `xcb`; broader compatibility is not established.
+
+## Development-checkout launch
 
 **PTT is release-to-translate.** Hold a talk button or key to record; recognition, translation and speech generation for that turn start only after release. Pauses and the former eight-second boundary do not submit held speech. The Live PTT option has been removed, not merely unchecked. Restart an already-open app to load the change. Verification of this revision is recorded below.
 
@@ -40,7 +52,7 @@ The larger model is optional, not a universal accuracy fix. In the latest 14-cas
 
 The previous live-streaming experiment is retired following independently reproduced omissions and duplication; its source/tests are preserved under ignored local evidence rather than exposed in the application. Current PTT supplies the whole released utterance to the local pipeline. Generated speech checks are not a guarantee for human speech, different hardware, continuous overlapping talk or room acoustics. Finnish ASR inflections and repeated-utterance recognition still have known quality limitations.
 
-TranslateGemma uses the separately verified compatible GGUF recorded in `quality-model.lock.json`. It needs a trusted installed Vulkan/AVX2 `llama-server` backend under LM Studio's backend directory. Translitter launches that executable directly; it does not use a cloud service or start/manage LM Studio's API server. Each start creates a private Unix socket inside a mode-0700 directory. Before sending HTTP bytes, the client checks the connected peer's exact process ID and user ID against its owned child; no TCP listener is adopted. Unconfigured clients fail closed. The runtime disables prompt logging, slot inspection, tools, MCP proxy and inherited `LLAMA_*` overrides. Socket-level absolute deadlines prevent byte trickles from extending response limits. No runtime/model downloads occur automatically. It stays warm between conversations; selecting Marian or closing the app releases its owned process and socket directory. Installed runtime binaries and the local OS are trusted software, not a sandbox or independently publisher-authenticated by Translitter.
+TranslateGemma uses the separately verified compatible GGUF recorded in `quality-model.lock.json`. The **AppImage bundles its own pinned CPU/Vulkan backend and does not require LM Studio**. An unmarked development checkout can instead use a trusted installed Vulkan/AVX2 `llama-server` backend under LM Studio's backend directory. Translitter launches the selected executable directly; it does not use a cloud service or start/manage LM Studio's API server. Each start creates a private Unix socket inside a mode-0700 directory. Before sending HTTP bytes, the client checks the connected peer's exact process ID and user ID against its owned child; no TCP listener is adopted. Unconfigured clients fail closed. The runtime disables prompt logging, slot inspection, tools, MCP proxy and inherited `LLAMA_*` overrides. Socket-level absolute deadlines prevent byte trickles from extending response limits. No runtime/model downloads occur automatically. It stays warm between conversations; selecting Marian or closing the app releases its owned process and socket directory. Installed runtime binaries and the local OS are trusted software, not a sandbox or independently publisher-authenticated by Translitter.
 
 ## Verified language pairs
 

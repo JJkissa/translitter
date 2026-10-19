@@ -11,6 +11,7 @@ from urllib.request import ProxyHandler, build_opener
 
 from .quality import LocalTranslator, QualityUnavailable, _NoRedirects
 from .quality_transport import OwnedUnixHTTPHandler
+from .package_runtime import packaged_backend, PackageRuntimeError
 
 MODEL_RELATIVE_PATH = Path("models/quality-translategemma-4b/translategemma-4b-llamacpp-Q4_K_M.gguf")
 MODEL_SIZE = 2489909312
@@ -74,14 +75,20 @@ class QualityRuntime:
         except OSError:
             raise RuntimeUnavailable("Quality model is missing or invalid") from None
 
-        backend = _find_backend()
+        if cancelled():
+            return None
+        try:
+            bundled = packaged_backend()
+        except PackageRuntimeError:
+            raise RuntimeUnavailable("Packaged quality runtime is missing or invalid") from None
+        backend, backend_arguments = bundled if bundled is not None else (_find_backend(), ())
         if cancelled():
             return None
         ready = False
         try:
             if not hasattr(socket, "SO_PEERCRED") or not hasattr(socket, "AF_UNIX"):
                 raise RuntimeUnavailable("Quality runtime requires Linux private IPC")
-            directory = Path(os.environ.get("TMPDIR", Path.home() / ".hermes/cache/scratch"))
+            directory = Path(os.environ.get("TMPDIR", tempfile.gettempdir()))
             self._socket_directory = tempfile.TemporaryDirectory(prefix="tq-", dir=directory)
             socket_path = Path(self._socket_directory.name).resolve() / "api.sock"
             if len(os.fsencode(socket_path)) >= 108:
@@ -93,6 +100,7 @@ class QualityRuntime:
                 "--threads-batch", "4", "--offline", "--no-webui", "--no-jinja",
                 "--chat-template", "gemma", "--log-disable",
                 "--cors-origins", "", "--no-slots", "--no-agent", "--no-ui-mcp-proxy",
+                *backend_arguments,
             ], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL, start_new_session=True,
                 env={key: value for key, value in os.environ.items() if not key.startswith("LLAMA_")})
